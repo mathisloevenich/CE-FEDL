@@ -1,0 +1,23 @@
+name: flwr_torch
+channels:
+  - conda-forge
+  - pytorch
+dependencies:
+  - python=3.10
+  - pip
+  - numpy
+  - matplotlib
+  - jupyterlab
+  - pytorch
+  - torchvision
+  - torchtext
+  - opencv
+  - librosa
+  - flwr["simulation"]
+  - hydra-core
+  - bokeh
+  - pip:
+    - torchviz
+    - typing
+    - pympler
+    - pandas
