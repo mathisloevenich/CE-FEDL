@@ -1,0 +1,4 @@
+aggregation_methods/outputs/
+aggregation_methods/data/
+aggregation_methods/__pycache__/
+aggregation_methods/visualize.html
