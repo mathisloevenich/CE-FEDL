@@ -1,7 +1,7 @@
 import torch
 from torch.utils.data import random_split, DataLoader
 from torchvision.transforms import ToTensor, Compose, Normalize
-from torchvision.datasets import MNIST
+from torchvision.datasets import MNIST, CIFAR10
 
 
 def get_mnist(data_path: str = './data'):
@@ -9,6 +9,14 @@ def get_mnist(data_path: str = './data'):
     tr = Compose([ToTensor(), Normalize((0.1307,), (0.3081,))])
     train = MNIST(data_path, train=True, download=True, transform=tr)
     test = MNIST(data_path, train=False, download=True, transform=tr)
+
+    return train, test
+
+
+def get_cifar10(data_path: str = './data'):
+
+    train = CIFAR10(data_path, train=True, download=True, transform=tr)
+    test = CIFAR10(data_path, train=False, download=True, transform=tr)
 
     return train, test
 
