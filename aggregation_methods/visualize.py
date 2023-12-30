@@ -23,6 +23,6 @@ def plot_results(results):
 
 
 if __name__ == "__main__":
-    file_paths = [("FedAvg", "red", r".\results\first_test\fed.pkl"),
-                  ("FedAvgM", "blue", r".\results\first_test\fed_m04.pkl")]
+    file_paths = [("FedAvg", "red", r".\results\first_test\fed100.pkl"),
+                  ("FedAvgM", "blue", r".\results\first_test\fed_m100.pkl")]
     plot_results(file_paths)
