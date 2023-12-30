@@ -1,3 +1,6 @@
+# Code by Natasha
+# Last updated: 2023.12.30
+
 import torch
 import torchvision
 from torch import nn
