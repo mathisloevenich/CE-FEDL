@@ -1,13 +1,12 @@
 # CE-FEDL
 Communication Efficient (CE) - Federated Learning (FEDL)
 
-This project aims to compare different methods by each participant against each other on the same two datasets.
-The main focus is to reduce the communication overhead, which is a common problem with federated learning.
+This project aims to compare different methods of improving the communication efficiency of federated learning. The goal is to reduce the communication overhead, while still retaining good performance.
 
-The goal is to reduce the communication while keeping the performance and results as balanced as possible.
+For the experiments, the [CIFAR-10 and FEMNIST datasets](data.py) are used with a [500k parameter convolutional model](models.py).
 
-The methods are:
+The four methods being compared are:
 - Federated Distillation
-- A choice of different aggregation methods
-- personalization
-- Compression methods (especially sparsification)
+- [Aggregation](aggregation_methods)
+- Pruning
+- [Sparsification](sparsification_method_natasha)
