@@ -110,7 +110,7 @@ class SparsifyClient(fl.client.Client):
                 spars_indices = np.array(random.sample(range(self.model_info["num_model_params"]), self.model_info["num_to_spars"]))
 
         # create a numpy array containing the sparsified index positions and parameter values
-        coo_delta_parameters = np.array([(index, flat_delta_parameters[index]) for index in spars_indices])
+        coo_delta_parameters = np.array([(index, flat_delta_parameters[index]) for index in spars_indices], dtype=np.float32)
         # send the sparsified updated parameters to the server
         coo_delta_bytes = utils.values_to_bytes(coo_delta_parameters)
         return FitRes(status=Status(code=Code.OK, message="Success"),
