@@ -1,36 +1,37 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torchvision.models import resnet18
+import numpy as np
 
+def get_resnet18(num_classes):
+    if num_classes==10:
+        return get_resnet18_cifar10()
+    elif num_classes==62:
+        return get_resnet18_femnist()
+    else:
+        return resnet18(num_classes=num_classes)
 
-class Net(nn.Module):
-    """A simple CNN suitable for simple vision tasks."""
+def get_resnet18_femnist(seed=47):
+    torch.manual_seed(seed)
+    femnist_model = resnet18(num_classes=62)
+    femnist_model.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
 
-    def __init__(self, num_classes: int) -> None:
-        super(Net, self).__init__()
-        self.conv1 = nn.Conv2d(1, 6, 5)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(6, 16, 5)
-        self.fc1 = nn.Linear(16 * 4 * 4, 120)
-        self.fc2 = nn.Linear(120, 84)
-        self.fc3 = nn.Linear(84, num_classes)
+    return femnist_model
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.pool(F.relu(self.conv1(x)))
-        x = self.pool(F.relu(self.conv2(x)))
-        x = x.view(-1, 16 * 4 * 4)
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
-        return x
+def get_resnet18_cifar10(seed=47):
+    torch.manual_seed(seed)
+    cifar10_model = resnet18(num_classes=10)
 
+    return cifar10_model
 
 def train(net, trainloader, optimizer, epochs, device: str):
     """Train the network on the training set.
 
     This is a fairly simple training loop for PyTorch.
     """
-    criterion = torch.nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss()
+
     net.train()
     net.to(device)
     for _ in range(epochs):

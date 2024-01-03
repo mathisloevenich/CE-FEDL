@@ -1,24 +1,18 @@
-name: flwr_torch
+name: flwr_cuda_11.8
 channels:
   - conda-forge
   - pytorch
+  - nvidia
 dependencies:
-  - python=3.10
-  - pip
-  - numpy
-  - matplotlib
-  - jupyterlab
-  - pytorch
-  - torchvision
-  - torchtext
-  - opencv
-  - librosa
-  - flwr["simulation"]
-  - hydra-core
-  - bokeh
+  - python==3.10
+  - pip==23.3.2
+  - numpy==1.26.2
+  - matplotlib==3.8.2
+  - pytorch==2.1.1
+  - torchvision==0.16.1
+  - torchaudio==2.1.1
+  - pytorch-cuda=11.8
+  - hydra-core==1.3.2
   - pip:
-    - torchviz
-    - typing
-    - pympler
-    - pandas
-    - fedlab
+    - flwr["simulation"]==1.6.0
+    - fedlab==1.3.0

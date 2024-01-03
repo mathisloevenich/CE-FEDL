@@ -1,46 +1,75 @@
-import flwr.server.strategy
+import torch
+import flwr as fl
 from flwr.common import Parameters, Scalar, EvaluateRes, EvaluateIns, FitRes, FitIns
 from flwr.server.client_proxy import ClientProxy
+from flwr.server.strategy import FedAvgM, FedAvg
+import numpy as np
+
 from typing import Optional, Tuple, Dict, List, Union
 from pympler import asizeof
 
-import torch
-import pickle
-import flwr as fl
-
-from flwr.server.strategy import FedAvgM, FedAvg
-from omegaconf import DictConfig
-from model import Net, test
 from collections import OrderedDict
+from omegaconf import DictConfig
+
+from model import get_resnet18, test
+
+
+def set_weights(model: torch.nn.ModuleList, weights: fl.common.NDArrays) -> None:
+    """Set model weights from a list of NumPy ndarrays."""
+    state_dict = OrderedDict(
+        {
+            k: torch.tensor(np.atleast_1d(v))
+            for k, v in zip(model.state_dict().keys(), weights)
+        }
+    )
+    model.load_state_dict(state_dict, strict=True)
+
+    
+def get_weights(model: torch.nn.ModuleList) -> fl.common.NDArrays:
+    """Get model weights as a list of NumPy ndarrays."""
+    return [val.cpu().numpy() for _, val in model.state_dict().items()]
 
 
 def get_on_fit_config(config: DictConfig):
+    """Return function that prepares config to send to clients."""
+
     def fit_config_fn(server_round: int):
 
-        return {'lr': config.lr,
-                'momentum': config.momentum,
-                'local_epochs': config.local_epochs}
+        return {
+            "lr": config.lr,
+            "momentum": config.momentum,
+            "local_epochs": config.local_epochs,
+        }
 
     return fit_config_fn
 
 
-def get_evaluate_fn(num_classes: int, test_loader):
+def get_evaluate_fn(num_classes: int, testloader):
+    """Define function for global evaluation on the server."""
 
     def evaluate_fn(server_round: int, parameters, config):
 
-        model = Net(num_classes)
+        model = get_resnet18(num_classes)
 
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
         params_dict = zip(model.state_dict().keys(), parameters)
-        state_dict = OrderedDict({k: torch.Tensor(v) for k, v in params_dict})
+        state_dict = OrderedDict({k: torch.from_numpy(v) for k, v in params_dict})
         model.load_state_dict(state_dict, strict=True)
 
-        loss, accuracy = test(model, test_loader, device)
+        loss, accuracy = test(model, testloader, device)
 
         return loss, {"accuracy": accuracy}
 
     return evaluate_fn
+
+def weighted_average(metrics):
+    # Multiply accuracy of each client by number of examples used
+    accuracies = [num_examples * m["accuracy"] for num_examples, m in metrics]
+    examples = [num_examples for num_examples, _ in metrics]
+
+    # Aggregate and return custom metric (weighted average)
+    return {"accuracy": sum(accuracies) / sum(examples)}
 
 
 def create_tracker_strategy(server_strategy, cfg, test_loader, initial_parameters):
