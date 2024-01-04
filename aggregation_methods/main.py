@@ -11,7 +11,7 @@ from dataset import prepare_dataset, femnist_data, cifar_data
 from client import generate_client_fn
 from server import get_on_fit_config, get_evaluate_fn, weighted_average
 
-config_name="base_femnist" 
+config_name="base_cifar" 
 # A decorator for Hydra. This tells hydra to by default load the config in conf/base.yaml
 @hydra.main(config_path="conf", config_name=config_name, version_base=None)
 def main(cfg: DictConfig):
@@ -27,7 +27,7 @@ def main(cfg: DictConfig):
     if config_name=="base_cifar":
         trainloaders, validationloaders, testloader = prepare_dataset(num_partitions=cfg.num_clients, batch_size=cfg.batch_size, dataset_func=cifar_data)
     elif config_name=="base_femnist":
-        trainloaders, validationloaders = femnist_data(batch_size=cfg.batch_size, combine_clients=1, subset=cfg.num_clients)
+        trainloaders, validationloaders = femnist_data(batch_size=cfg.batch_size, combine_clients=10, subset=cfg.num_clients)
 
     ## 3. Define your clients
     client_fn = generate_client_fn(trainloaders, validationloaders, cfg.num_classes)
@@ -51,7 +51,7 @@ def main(cfg: DictConfig):
         strategy = fl.server.strategy.FedAvg(
                 fraction_fit=0.0,
                 min_fit_clients=cfg.num_clients_per_round_fit, 
-                fraction_evaluate=0.0,
+                fraction_evaluate=0.25,
                 min_evaluate_clients=cfg.num_clients_per_round_eval,
                 min_available_clients=cfg.num_clients,
                 on_fit_config_fn=get_on_fit_config(

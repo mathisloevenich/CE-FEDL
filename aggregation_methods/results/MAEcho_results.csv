@@ -1,0 +1,7 @@
+Dataset, Clients, Different Init, Alpha, Step Size, Iterations, Accuracy;
+Cifar, 20, True, 0.01, 0.05, 300, 10%;
+Cifar, 10, True, 0.01, 0.05, 300, 11.92%;
+Cifar, 5, True, 0.01, 0.05, 300, 17.53%;
+Cifar, 2, True, 0.01, 0.05, 300, 40.88%;
+Cifar, 5, True, 0.01, 0.05, 30, 19.4%;
+Cifar, 5, False, 0.01, 0.05, 30, 19.4%;
