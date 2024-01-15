@@ -11,9 +11,9 @@ torch.cuda.manual_seed(0)
 np.random.seed(0) 
 random.seed(0)
 
+classes = 62
 
 ########################################################################################################################
-
 
 
 def createp(model, train_loader,args=None):
@@ -94,14 +94,13 @@ def record_net_data_stats(y_train, net_dataidx_map):
 
     return net_cls_counts
 
-def partition(alphaa, n_netss, y_train,):
+def partition(alphaa, n_netss, y_train, K=62):
     min_size = 0
     n_nets = n_netss
     N = y_train.shape[0]
     net_dataidx_map = {}
     alpha = alphaa
-    K=10
-    while min_size < 10:
+    while min_size < K:
         idx_batch = [[] for _ in range(n_nets)]
         for k in range(K):
             idx_k = np.where(y_train == k)[0]
@@ -122,8 +121,8 @@ def partition(alphaa, n_netss, y_train,):
 
 def noniid_ensemble(models,test,splits,args=None):    
     if args.split:
-        all_classes = list(range(10)) 
-        t_cla = np.array([0]*10)
+        all_classes = list(range(classes)) 
+        t_cla = np.array([0]*classes)
         for i in splits:
             t_cla[i]+=1
 
@@ -188,8 +187,8 @@ def noniid_avgmodel_o(w,splits,split=True):
                 w_avg.state_dict()[key] += (w[i].state_dict()[key])
             w_avg.state_dict()[key] /= len(w)
         key ='fc4.weight'
-        all_classes = list(range(10)) 
-        t_cla = np.array([0]*10)
+        all_classes = list(range(classes)) 
+        t_cla = np.array([0]*classes)
         for i in splits:
             t_cla[i]+=1
 
@@ -215,8 +214,8 @@ def noniid_avgmodel_o(w,splits,split=True):
 
 def noniid_avgmodel(w,splits,split=True):
     if split:
-        all_classes = list(range(10)) 
-        t_cla = np.array([0]*10)
+        all_classes = list(range(classes)) 
+        t_cla = np.array([0]*classes)
         for i in splits:
             t_cla[i]+=1
 

@@ -1,5 +1,3 @@
----
-
 num_rounds: 30
 num_clients: 20
 num_classes: 10
@@ -8,6 +6,6 @@ num_clients_per_round_fit: 5
 num_clients_per_round_eval: 5
 server_momentum: 0.4
 config_fit:
-  lr: 0.02
+  lr: 0.05
   momentum: 0.9
   local_epochs: 1

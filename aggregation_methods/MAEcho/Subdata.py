@@ -1,12 +1,73 @@
-import torch 
-from torch.utils.data import Dataset
-import torch.utils.data as data
-from PIL import Image
 import numpy as np
-from torchvision.datasets import MNIST, CIFAR10
+import torch 
+import torch.utils.data as data
+import torchvision
+import torchvision.transforms as transforms
+import os
+import random
+import shutil
+
+
+from PIL import Image
+from torch.utils.data import DataLoader, random_split
+from torchvision.datasets import MNIST, CIFAR10, utils
+
 torch.manual_seed(0)
 torch.cuda.manual_seed(0) 
 np.random.seed(0) 
+
+
+def cifar_data(data_path: str = "./data"):
+    """
+    Returns: a tuple containing the training data loaders, and test data loaders,
+             with a dataloader for each client
+    """
+    mean = [x / 255 for x in [125.3, 123.0, 113.9]]
+    std = [x / 255 for x in [63.0, 62.1, 66.7]]
+    transform = transforms.Compose([transforms.ToTensor(),transforms.Normalize(mean,std)])
+    train_data = torchvision.datasets.CIFAR10(root=data_path, train=True, transform=transform, download=True)
+    test_data = torchvision.datasets.CIFAR10(root=data_path, train=False, transform=transform, download=True)
+
+    return train_data, test_data
+
+
+def femnist_data(data_path=r'C:\Users\tim\Documents\Guided Project\Pytorch\CE-FEDL\aggregation_methods\data', seed=47):
+    """ 
+    Input: the path to the folder of json files
+    Returns: a tuple containing the training dataloaders, and test dataloaders,
+             with a dataloader for each client
+    """
+    mean = (0.9637,)
+    std = (0.1591,)
+    transform=transforms.Compose([transforms.ToTensor(),transforms.Normalize(mean,std)])
+    train_data = FEMNIST(root=data_path, train=True, download=True, transform=transform)
+    test_data = FEMNIST(root=data_path, train=False, download=True, transform=transform)
+    train_data.subsample(0.1)
+    test_data.subsample(0.1)
+
+    return train_data, test_data
+
+
+def prepare_dataset(num_partitions: int, batch_size: int, dataset_func = cifar_data, seed=47):
+
+    train, test = dataset_func()
+
+    num_images = len(train) // num_partitions
+    partition_len = [num_images] * num_partitions
+    remainder = len(train) % num_partitions
+    if remainder > 0:
+        partition_len[-1] += remainder
+
+    train = random_split(train, partition_len, torch.Generator().manual_seed(seed))
+
+    train_loaders = []
+
+    for data in train:
+        train_loaders.append(DataLoader(data, batch_size=batch_size, shuffle=True, num_workers=6))
+
+    test_loader = DataLoader(test, batch_size=batch_size, shuffle=False, num_workers=6)
+
+    return train_loaders, test_loader
 
 class MNIST_truncated(data.Dataset):
 
@@ -106,42 +167,32 @@ class CIFAR10_truncated(data.Dataset):
 
     def __len__(self):
         return len(self.data)
-    
-from torchvision.datasets import MNIST, utils
-from PIL import Image
-import os.path
-import torch
 
 
 class FEMNIST(MNIST):
-    """
-    This dataset is derived from the Leaf repository
-    (https://github.com/TalwalkarLab/leaf) pre-processing of the Extended MNIST
-    dataset, grouping examples by writer. Details about Leaf were published in
-    "LEAF: A Benchmark for Federated Settings" https://arxiv.org/abs/1812.01097.
-    """
-    resources = [
-        ('https://raw.githubusercontent.com/tao-shen/FEMNIST_pytorch/master/femnist.tar.gz',
-         '59c65cec646fc57fe92d27d83afdf0ed')]
-
-    def __init__(self, root, train=True, transform=None, target_transform=None,
-                 download=False):
-        super(MNIST, self).__init__(root, transform=transform,
-                                    target_transform=target_transform)
+    def __init__(self, root, train=True, transform=None, target_transform=None, download=False):
+        super(MNIST, self).__init__(root, transform=transform, target_transform=target_transform)
+        self.download = download
+        self.download_link = 'https://media.githubusercontent.com/media/GwenLegate/femnist-dataset-PyTorch/main/femnist.tar.gz'
+        self.file_md5 = '60433bc62a9bff266244189ad497e2d7'
         self.train = train
+        self.root = root
+        self.training_file = f'{self.root}/FEMNIST/processed/femnist_train.pt'
+        self.test_file = f'{self.root}/FEMNIST/processed/femnist_test.pt'
 
-        if download:
-            self.download()
+        if not os.path.exists(f'{self.root}/FEMNIST/processed/femnist_test.pt') or not os.path.exists(f'{self.root}/FEMNIST/processed/femnist_train.pt'):
+            if self.download:
+                self.dataset_download()
+            else:
+                raise RuntimeError('Dataset not found, set parameter download=True to download')
 
-        if not self._check_exists():
-            raise RuntimeError('Dataset not found.' +
-                               ' You can use download=True to download it')
         if self.train:
             data_file = self.training_file
         else:
             data_file = self.test_file
 
-        self.data, self.targets, self.users_index = torch.load(os.path.join(self.processed_folder, data_file))
+        data_and_targets = torch.load(data_file)
+        self.data, self.targets = data_and_targets[0], data_and_targets[1]
 
     def __getitem__(self, index):
         img, target = self.data[index], int(self.targets[index])
@@ -151,26 +202,29 @@ class FEMNIST(MNIST):
         if self.target_transform is not None:
             target = self.target_transform(target)
         return img, target
+    
+    def subsample(self, fraction):
+        """ Reduce the size of the dataset to the specified fraction """
+        total_samples = len(self.data)
+        reduced_size = int(total_samples * fraction)
+        indices = random.sample(range(total_samples), reduced_size)
+        self.data = self.data[indices]
+        self.targets = self.targets[indices]
 
-    def download(self):
-        """Download the FEMNIST data if it doesn't exist in processed_folder already."""
-        import shutil
-
-        if self._check_exists():
-            return
-
-        utils.makedir_exist_ok(self.raw_folder)
-        utils.makedir_exist_ok(self.processed_folder)
+    def dataset_download(self):
+        paths = [f'{self.root}/FEMNIST/raw/', f'{self.root}/FEMNIST/processed/']
+        for path in paths:
+            if not os.path.exists(path):
+                os.makedirs(path)
 
         # download files
-        for url, md5 in self.resources:
-            filename = url.rpartition('/')[2]
-            utils.download_and_extract_archive(url, download_root=self.raw_folder, filename=filename, md5=md5)
+        filename = self.download_link.split('/')[-1]
+        utils.download_and_extract_archive(self.download_link, download_root=f'{self.root}/FEMNIST/raw/', filename=filename, md5=self.file_md5)
 
-        # process and save as torch files
-        print('Processing...')
-        shutil.move(os.path.join(self.raw_folder, self.training_file), self.processed_folder)
-        shutil.move(os.path.join(self.raw_folder, self.test_file), self.processed_folder)
+        files = ['femnist_train.pt', 'femnist_test.pt']
+        for file in files:
+            # move to processed dir
+            shutil.move(os.path.join(f'{self.root}/FEMNIST/raw/', file), f'{self.root}/FEMNIST/processed/')
 
         
 # class SubDataset(Dataset):

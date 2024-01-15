@@ -38,3 +38,5 @@ log = {
         }
 
 ```
+
+python noniid.py --alpha 10000 --model_type cnnnet --data cifar --n_nets 2 --diff_init Flase --norm True --maxt_times 30 --C 0.5 --test True --lambdastep 0.05 --logdir logfinal --expe 30_500cnn

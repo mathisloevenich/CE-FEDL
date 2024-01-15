@@ -14,5 +14,5 @@ dependencies:
   - pytorch-cuda=11.8
   - hydra-core==1.3.2
   - pip:
-    - flwr["simulation"]==1.6.0
     - fedlab==1.3.0
+    - flwr["simulation"]==1.6.0

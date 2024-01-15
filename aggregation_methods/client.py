@@ -6,7 +6,7 @@ import numpy as np
 import torch
 import flwr as fl
 
-from model import get_resnet18, train, test
+from model import get_model, train, test
 
 
 class FlowerClient(fl.client.NumPyClient):
@@ -20,7 +20,7 @@ class FlowerClient(fl.client.NumPyClient):
         self.valloader = vallodaer
 
         # a model that is randomly initialised at first
-        self.model = get_resnet18(num_classes)
+        self.model = get_model(num_classes)
 
         # figure out if this client has access to GPU support or not
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")

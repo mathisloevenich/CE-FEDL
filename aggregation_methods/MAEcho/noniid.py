@@ -2,14 +2,14 @@ import torch
 import torch.nn as nn
 import torchvision
 import torchvision.transforms as transforms
-from Subdata import  MNIST_truncated, CIFAR10_truncated, FEMNIST
+from torch.utils.data.dataset import Subset, random_split
+from Subdata import  MNIST_truncated, CIFAR10_truncated, FEMNIST, prepare_dataset, cifar_data, femnist_data
 import torch.nn.functional as F
-import numpy
 import copy
 import random
 import trainmodel as approach
 import modelset as network
-from utils import partition,createp,valid,noniid_avgmodel_o,noniid_aggr,noniid_ensemble
+from utils import partition, createp, valid, noniid_avgmodel_o, noniid_aggr, noniid_ensemble
 import numpy as np
 from do_ot import doot
 import argparse
@@ -50,30 +50,35 @@ np.random.seed(seed)
 random.seed(seed)
 torch.backends.cudnn.enabled = False
 torch.backends.cudnn.deterministic = True
-
+num_classes = 62
 # dataset
 if args.data == 'cifar':
     mean = [x / 255 for x in [125.3, 123.0, 113.9]]
     std = [x / 255 for x in [63.0, 62.1, 66.7]]
     train_data = torchvision.datasets.CIFAR10(root='./data/',train=True, download=True)
     test_data = torchvision.datasets.CIFAR10(root='./data/',train=False, transform=transforms.Compose([transforms.ToTensor(),transforms.Normalize(mean,std)]))
+    num_classes = 10
 elif args.data  == 'mnist':
     mean = (0.1307,)
     std = (0.3081,)
     train_data = torchvision.datasets.MNIST(root='./data/',train=True,download=True)
     test_data =torchvision.datasets.MNIST(root='./data/',                              train=False,transform=transforms.Compose([transforms.ToTensor(),transforms.Normalize(mean,std)]))
 elif args.data == 'femnist':
-    mean = (228.05,)
-    std = (88.94,)
-    train_data = FEMNIST(root='./data/',train=True, download=True)
-    test_data = FEMNIST(root='./data/',train=False, transform=transforms.Compose([transforms.ToTensor(),transforms.Normalize(mean,std)]))
+    mean = (0.9637,)
+    std = (0.1591,)
+    train_data = FEMNIST(root=r'C:\Users\tim\Documents\Guided Project\Pytorch\CE-FEDL\aggregation_methods\data', train=True, download=True)
+    test_data = FEMNIST(root=r'C:\Users\tim\Documents\Guided Project\Pytorch\CE-FEDL\aggregation_methods\data', train=False, download=True, transform=transforms.Compose([transforms.ToTensor(),transforms.Normalize(mean,std)]))
+    train_data.subsample(0.1)
+    test_data.subsample(0.1)
+    num_classes = 62
 
 ytrain_label = np.array([train_data[i][1] for i in range(len(train_data))])
 
 for r in range(args.repeat):
     models = []
+    
     traindatas = []
-    net_dataidx_map,traindata_cls_counts =partition(args.alpha, args.n_nets ,ytrain_label)
+    net_dataidx_map,traindata_cls_counts = partition(args.alpha, args.n_nets ,ytrain_label, K=num_classes)
     
     splits=[[] for i in range(args.n_nets)]
     for mindex,classes in enumerate(splits):
@@ -81,16 +86,22 @@ for r in range(args.repeat):
                 if traindata_cls_counts[mindex][i]>1:classes.append(i) #if images number <=1, then ignore the parameters of this class in the last layer when ensemble.
     
     #data partition
+
     for i in range(args.n_nets):
         if args.data=='mnist':
             traindata = MNIST_truncated(train_data,net_dataidx_map[i],transform=transforms.Compose([transforms.ToTensor(),transforms.Normalize(mean,std)]),)
-        if args.data=='femnist':
+        elif args.data=='femnist':
             traindata = MNIST_truncated(train_data,net_dataidx_map[i],transform=transforms.Compose([transforms.ToTensor(),transforms.Normalize(mean,std)]),)
         elif args.data=='cifar':
             traindata = CIFAR10_truncated(train_data,net_dataidx_map[i],transform=transforms.Compose([transforms.ToTensor(),transforms.Normalize(mean,std)]),)
         traindatas.append(torch.utils.data.DataLoader(dataset=traindata,batch_size=args.batch_size, shuffle=True))
     testdata = torch.utils.data.DataLoader(dataset=test_data,batch_size=args.batch_size, shuffle=False)
-
+                
+    #if args.data=='femnist':
+    #    traindatas, testdata = prepare_dataset(num_partitions=args.n_nets, batch_size=args.batch_size, dataset_func=femnist_data)
+    #elif args.data=='cifar':
+    #    traindatas, testdata = prepare_dataset(num_partitions=args.n_nets, batch_size=args.batch_size, dataset_func=cifar_data)
+    
 
     if args.diff_init:
         if args.model_type=='mlpnet':
@@ -98,12 +109,12 @@ for r in range(args.repeat):
                 models.append(network.mnistnet().cuda(args.gpu_id))
         elif args.model_type=='cnnnet':
             for mnum in range(args.n_nets):
-                models.append(network.cnnNet().cuda(args.gpu_id))
+                models.append(network.create_model(args.data).cuda(args.gpu_id))
     else:
         if args.model_type=='mlpnet':
             models.append(network.mnistnet().cuda(args.gpu_id))
         elif args.model_type=='cnnnet':
-            models.append(network.cnnNet().cuda(args.gpu_id))
+            models.append(network.create_model(args.data).cuda(args.gpu_id))
         for mnum in range(1,args.n_nets):
             models.append(copy.deepcopy(models[0]))
      

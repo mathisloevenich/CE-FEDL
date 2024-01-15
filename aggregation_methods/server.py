@@ -11,7 +11,7 @@ from pympler import asizeof
 from collections import OrderedDict
 from omegaconf import DictConfig
 
-from model import get_resnet18, test
+from model import get_model, test
 
 
 def set_weights(model: torch.nn.ModuleList, weights: fl.common.NDArrays) -> None:
@@ -49,7 +49,7 @@ def get_evaluate_fn(num_classes: int, testloader):
 
     def evaluate_fn(server_round: int, parameters, config):
 
-        model = get_resnet18(num_classes)
+        model = get_model(num_classes)
 
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 

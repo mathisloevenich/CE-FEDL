@@ -17,6 +17,7 @@ def plot_results(results, central=True, distributed=True):
             cen_loss = np.array(df["history"].losses_centralized)
             acc_figure.line(cen_acc[:, 0], cen_acc[:, 1], legend_label="Test Accuracy " + label, line_width=2, color="red")
             loss_figure.line(cen_loss[:, 0], cen_loss[:, 1], legend_label="Test Loss " + label, line_width=2, color="red")
+            print(cen_acc[-1, :])
 
         if distributed:
             dis_acc = np.array(df["history"].metrics_distributed["accuracy"])
@@ -30,5 +31,5 @@ def plot_results(results, central=True, distributed=True):
 
 
 if __name__ == "__main__":
-    file_paths = [("FedAvg", "red", r".\results\femnist_resnet18_c200.pkl")]
-    plot_results(file_paths, central=False)
+    file_paths = [("FedAvg", "red", r".\results\cifar_30r_20c_0.02l.pkl")]
+    plot_results(file_paths, central=True)

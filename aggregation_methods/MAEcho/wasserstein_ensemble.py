@@ -13,6 +13,7 @@ torch.manual_seed(0)
 torch.cuda.manual_seed(0) 
 np.random.seed(0) 
 
+model_name = "femnist"
 
 def cost_matrix(x, y, p=2):
     "Returns the matrix of $|x_i-y_j|^p$."
@@ -102,9 +103,9 @@ def get_wassersteinized_layers_modularized(args, networks, eps=1e-7, test_loader
             aligned_wt = fc_layer0_weight_data
         else:
 
-#             print("shape of layer: model 0", fc_layer0_weight_data.shape)
-#             print("shape of layer: model 1", fc_layer1_weight_data.shape)
-#             print("shape of previous transport map", T_var.shape)
+            #print("shape of layer: model 0", fc_layer0_weight_data.shape)
+            #print("shape of layer: model 1", fc_layer1_weight_data.shape)
+            #print("shape of previous transport map", T_var.shape)
 
             # aligned_wt = None, this caches the tensor and causes OOM
             if is_conv:
@@ -119,6 +120,7 @@ def get_wassersteinized_layers_modularized(args, networks, eps=1e-7, test_loader
                     fc_layer1_weight_data.view(fc_layer1_weight_data.shape[0], -1)
                 )
             else:
+                # print("Type: ", type(fc_layer0_weight.data.shape), " Shape: ", fc_layer0_weight.data.shape)
                 if fc_layer0_weight.data.shape[1] != T_var.shape[0]:
                     # Handles the switch from convolutional layers to fc layers
                     fc_layer0_unflattened = fc_layer0_weight.data.view(fc_layer0_weight.shape[0], T_var.shape[0], -1).permute(2, 0, 1)
@@ -516,7 +518,7 @@ def get_network_from_param_list(args, param_list, mtype,test_loader):
     if mtype=='mlpnet':
         new_network = mynetwork.mnistnet()#get_model_from_name(args, idx=1)
     elif mtype=='cnnnet':
-        new_network = mynetwork.cnnNet()#get_model_from_name(args, idx=1)
+        new_network = mynetwork.create_model(model_name)#get_model_from_name(args, idx=1)
     if args.gpu_id != -1:
         new_network = new_network.cuda(args.gpu_id)
 
@@ -526,7 +528,7 @@ def get_network_from_param_list(args, param_list, mtype,test_loader):
 #     routines.test(args, new_network, test_loader, log_dict)
 
     # set the weights of the new network
-    # print("before", new_network.state_dict())
+#     print("before", new_network.state_dict())
 #     print("len of model parameters and avg aligned layers is ", len(list(new_network.parameters())),
 #           len(param_list))
     assert len(list(new_network.parameters())) == len(param_list)

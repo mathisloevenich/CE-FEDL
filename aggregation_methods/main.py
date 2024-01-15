@@ -7,7 +7,7 @@ from omegaconf import DictConfig, OmegaConf
 
 import flwr as fl
 
-from dataset import prepare_dataset, femnist_data, cifar_data
+from dataset import prepare_dataset, femnist_data, cifar_data, femnist_data_json, femnist_dirichlet
 from client import generate_client_fn
 from server import get_on_fit_config, get_evaluate_fn, weighted_average
 
@@ -17,22 +17,22 @@ config_name="base_cifar"
 def main(cfg: DictConfig):
     ## 1. Parse config & get experiment output dir
     print(OmegaConf.to_yaml(cfg))
-    # Hydra automatically creates a directory for your experiments
+    # Hydra automatically creates a directory for experiments
     # by default it would be in <this directory>/outputs/<date>/<time>
-    # you can retrieve the path to it as shown below. We'll use this path to
-    # save the results of the simulation (see the last part of this main())
     save_path = HydraConfig.get().runtime.output_dir
 
-    ## 2. Prepare your dataset
+    ## 2. Prepare dataset
     if config_name=="base_cifar":
         trainloaders, validationloaders, testloader = prepare_dataset(num_partitions=cfg.num_clients, batch_size=cfg.batch_size, dataset_func=cifar_data)
     elif config_name=="base_femnist":
-        trainloaders, validationloaders = femnist_data(batch_size=cfg.batch_size, combine_clients=10, subset=cfg.num_clients)
+        trainloaders, validationloaders, testloader = prepare_dataset(num_partitions=cfg.num_clients, batch_size=cfg.batch_size, dataset_func=femnist_data)
+        # trainloaders, validationloaders = femnist_data_json(batch_size=cfg.batch_size, combine_clients=1, subset=cfg.num_clients, seed=47, load_files=1)
+        # trainloaders, validationloaders, testloader = femnist_dirichlet(alpha=0.1, clients=cfg.num_clients, batch_size=cfg.batch_size)
 
-    ## 3. Define your clients
+    ## 3. Define clients
     client_fn = generate_client_fn(trainloaders, validationloaders, cfg.num_classes)
 
-    ## 4. Define your strategy
+    ## 4. Define strategy
     if config_name=="base_cifar":
         strategy = fl.server.strategy.FedAvg(
                 fraction_fit=0.0,  
@@ -51,12 +51,13 @@ def main(cfg: DictConfig):
         strategy = fl.server.strategy.FedAvg(
                 fraction_fit=0.0,
                 min_fit_clients=cfg.num_clients_per_round_fit, 
-                fraction_evaluate=0.25,
+                fraction_evaluate=0.5,
                 min_evaluate_clients=cfg.num_clients_per_round_eval,
                 min_available_clients=cfg.num_clients,
                 on_fit_config_fn=get_on_fit_config(
                     cfg.config_fit
                 ),
+                evaluate_fn=get_evaluate_fn(cfg.num_classes, testloader),
                 evaluate_metrics_aggregation_fn=weighted_average,
         )
 
@@ -69,17 +70,17 @@ def main(cfg: DictConfig):
         ),
         strategy=strategy,
         client_resources={
-            "num_cpus": 6,
-            "num_gpus": 0.1,
+            "num_cpus": 2,
+            "num_gpus": 0.05,
         },
     )
 
-    ## 6. Save your results
+    ## 6. Save results
     results_path = Path(save_path) / "results.pkl"
 
     results = {"history": history}
 
-    # save the results as a python pickle
+    # Save the results as a python pickle
     with open(str(results_path), "wb") as h:
         pickle.dump(results, h, protocol=pickle.HIGHEST_PROTOCOL)
 
