@@ -22,9 +22,9 @@ class DistillationClient:
     def initialize(self):
         self.model = create_model(self.model_name)
 
-    def compute_soft_labels(self):
+    def compute_soft_labels(self, x_pub):
         with torch.no_grad():
-            outputs = self.model(self.x_pub)  # compute outputs
+            outputs = self.model(x_pub)  # compute outputs
             return torch.argmax(outputs, dim=1)  # return as same shape of labels
 
     def compress_soft_labels(self):
@@ -39,6 +39,6 @@ class DistillationClient:
     def fit(self):
         """Trains on local data and computes soft labels"""
         avg_loss, accuracy = self.train(self.train_loader)
-        self.soft_labels = self.compute_soft_labels()  # predict soft labels
+        self.soft_labels = self.compute_soft_labels(self.x_pub)  # predict soft labels
         # compress here
         return avg_loss, accuracy

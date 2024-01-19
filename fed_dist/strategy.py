@@ -1,14 +1,16 @@
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
-from models import create_model
+from models import get_resnet18_cifar10, get_resnet18_femnist
 from utils import train, evaluate
 
 
 class DistillationStrategy:
 
     def __init__(self, x_pub, y_pub, model_name="cifar"):
-        self.model = create_model(model_name)
+
+        # take resnet models
+        self.model = get_resnet18_cifar10() if model_name == "cifar" else get_resnet18_femnist()
         self.x_pub = x_pub  # fixed dataset
         self.y_pub = None  # non-fixed soft-labels
         self.y_pub_distill = y_pub  # server computed soft labels

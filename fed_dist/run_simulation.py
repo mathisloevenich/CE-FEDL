@@ -21,29 +21,31 @@ class Simulation:
             self,
             num_clients: int,
             num_rounds: int,
-            data_set: str,
+            data_set_name: str,
             b_up=8,
             b_down=8,
             client_participation: float = 1.0
     ):
         self.num_clients = num_clients
         self.num_rounds = num_rounds
-        self.train_loaders, self.test_loaders = self.load_dataset(data_set)
+        self.data_set_name = data_set_name
+        self.train_loaders, self.test_loaders = self.load_dataset(data_set_name)
         # don't need test_loaders so make public dataset by using it
         pub_trainloader = self.train_loaders[-1]  # last train set is public dataset
         x_pub = torch.cat([batch_x for batch_x, _ in pub_trainloader])
         y_pub = torch.cat([batch_y for _, batch_y in pub_trainloader])
-        self.strategy = DistillationStrategy(x_pub, y_pub, data_set)
-        self.clients = [self.client_fn(cid, x_pub, data_set) for cid in range(num_clients)]
+        # print(x_pub.shape, y_pub.shape)
+        self.strategy = DistillationStrategy(x_pub, y_pub, data_set_name)
+        self.clients = [self.client_fn(cid, x_pub, data_set_name) for cid in range(num_clients)]
         num_samples = int(len(self.clients) * client_participation)
         self.participating_clients = random.sample(self.clients, num_samples)
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
     def load_dataset(self, data_set):
         if data_set == "cifar":
-            return cifar_data(self.num_clients + 1)  # get one more for public dataset
+            return cifar_data(self.num_clients + 1, balanced_data=True)  # get one more for public dataset
         elif data_set == "femnist":
-            return femnist_data()
+            return femnist_data(combine_clients=self.num_clients + 1)
 
     def client_fn(self, cid, x_pub, model_name):
         train_loader = self.train_loaders[cid]
@@ -63,15 +65,18 @@ class Simulation:
         for t in range(1, self.num_rounds + 1):
             print("Round: ", t)
             for client in tqdm(self.participating_clients, desc="Training clients"):
-                client.initialize()
+                client.initialize()  # initialize client model (new)
 
                 # only train after first round and distill public model soft label information
                 if t > 1:
                     client.train(
-                        DataLoader(TensorDataset(self.strategy.get_x_pub(), self.strategy.get_soft_labels()), batch_size=32)
+                        DataLoader(
+                            TensorDataset(self.strategy.get_x_pub(), self.strategy.get_soft_labels()),
+                            batch_size=32
+                        )
                     )  # Distillation
 
-                client.fit()  # trains and computes soft labels
+                client.fit()  # trains on training data and computes soft labels
 
             self.strategy.set_soft_labels(self.aggregate_soft_labels())
             train_loss, train_accuracy = self.strategy.fit()  # trains and computes soft labels to distill
@@ -84,7 +89,6 @@ class Simulation:
             val_losses.append(val_loss)
             val_accuracies.append(val_accuracy)
 
-            print(val_loss, val_accuracy)
             print(f"Train Loss: {train_loss:.4f}, Train Accuracy: {train_accuracy:.4f}")
             print(f"Eval Loss: {val_loss:.4f}, Eval Accuracy: {val_accuracy:.4f}")
 
@@ -105,11 +109,11 @@ class Simulation:
         })
 
         # Dateipfad
-        file_prefix = "results_data/attempt"
+        directory = "results_data"
 
         index = 1
         while True:
-            file_path = f"{file_prefix}-cl{self.num_clients}-nr{self.num_rounds}_{index}.csv"
+            file_path = f"{directory}/{self.data_set_name}-cl{self.num_clients}-nr{self.num_rounds}_{index}.csv"
             if os.path.exists(file_path):
                 index += 1
             else:
