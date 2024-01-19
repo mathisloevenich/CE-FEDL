@@ -20,8 +20,7 @@ cifar_trainloaders, cifar_testloaders = data.cifar_data()
 ```
 ## Methods 
 
-The four methods being compared are:
-- Federated Distillation
+The three methods being compared are:
+- [Federated Distillation](fed_dist)
 - [Aggregation](aggregation_methods)
-- Pruning
 - [Sparsification](sparsification_method_natasha)
