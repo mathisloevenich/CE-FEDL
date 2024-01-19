@@ -4,23 +4,29 @@ from models import create_model
 from utils import train
 
 import torch
+import random
 
 
 class DistillationClient:
 
-    def __init__(self, cid, train_loader: DataLoader, x_pub, model_name="cifar"):
+    def __init__(
+            self,
+            cid,
+            train_loader: DataLoader,
+            x_pub,
+            model_architecture="cnn500k",
+            dataset_name="cifar"):
         self.cid = cid
         self.train_loader = train_loader
         self.x_pub = x_pub  # fixed public data
         self.soft_labels = None
         self.model = None
-        self.model_name = model_name
-
-    def get_id(self):
-        return self.cid
+        self.model_architecture = model_architecture
+        self.dataset_name = dataset_name
 
     def initialize(self):
-        self.model = create_model(self.model_name)
+        seed = random.randint(0, 1000) if rand else None
+        self.model = create_model(self.model_architecture, self.dataset_name, seed=seed)
 
     def compute_soft_labels(self, x_pub):
         with torch.no_grad():
