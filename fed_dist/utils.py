@@ -4,6 +4,7 @@
 import torch
 import torchvision
 from torch import nn
+import torch.nn.functional as F
 from torchvision.models import resnet18
 from torch.utils.data import DataLoader, random_split
 from fedlab.utils.dataset.partition import CIFAR10Partitioner
@@ -13,71 +14,143 @@ from tqdm import tqdm
 from io import BytesIO
 from flwr.common import Parameters
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-def train(model, 
-          train_loader,
-          optimiser="SGD", 
-          lr=0.1, 
-          epochs=1,
-          weight_decay=0,
-          ):
 
-    model = model.to(device)
-    loss_func = nn.CrossEntropyLoss()
+def train_on_soft_labels(
+        model,
+        train_loader,
+        optimiser="SGD",
+        lr=0.1,
+        weight_decay=0,
+):
+    model = model.to(DEVICE)
+
+    criterion = nn.CrossEntropyLoss()
     optim_dict = {"SGD": torch.optim.SGD(params=model.parameters(), lr=lr, weight_decay=weight_decay),
                   "Adam": torch.optim.Adam(params=model.parameters(), lr=lr, weight_decay=weight_decay)}
     optimiser = optim_dict[optimiser]
 
-    all_epochs_losses = []
-    all_full_train_losses = []
-    all_full_test_losses = []
-    
-    # for each epoch
-    for epoch in range(1, epochs+1):
-        
-        # for each mini-batch
-        for X_mini_train, y_mini_train in train_loader:
-            
-            # training
-            model.train()
-            
-            X_mini_train = X_mini_train.to(device)
-            y_mini_train = y_mini_train.to(device)
-            
-            y_mini_train_pred = model(X_mini_train)
-            train_loss = loss_func(y_mini_train_pred, y_mini_train)
-            optimiser.zero_grad() 
-            train_loss.backward() 
-            optimiser.step()
-            
-def test(model,
-         test_loader):
-    
-    model = model.to(device)
-    loss_func = nn.CrossEntropyLoss()
-    
-    model.eval()
-    with torch.no_grad():
-                
-        running_test_loss = 0
-        running_test_correct = 0
-                
-        # find loss and accuracy for each minibatch in test
-        for X_mini_test, y_mini_test in test_loader:
-            X_mini_test = X_mini_test.to(device)
-            y_mini_test = y_mini_test.to(device)
-            # calculate loss
-            y_mini_test_pred = model(X_mini_test)
-            test_loss = loss_func(y_mini_test_pred, y_mini_test)
-            running_test_loss += test_loss.item()
-            # calculate accuracy
-            y_mini_test_pred = torch.softmax(y_mini_test_pred, dim=1).argmax(dim=1)
-            running_test_correct += sum(y_mini_test_pred == y_mini_test).item()
+    metrics = {
+        "batch_loss": 0.0,
+        "total_loss": 0.0,
+        "accuracy": 0.0,
+        # Add other metrics you want to track
+    }
 
-        # find the loss and accuracy for the full dataset
-        test_loss = running_test_loss / len(test_loader)
-        test_acc = (running_test_correct / len(test_loader.dataset)) * 100
-        
-        return test_loss, test_acc
-    
+    # set model on train mode
+    model.train()
+
+    # for each mini-batch
+    for inputs, targets in train_loader:
+        inputs, targets = inputs.to(DEVICE), targets.to(DEVICE)
+
+        optimiser.zero_grad()
+
+        # forward pass
+        logits = model(inputs)
+        soft_labels = F.log_softmax(logits, dim=1)
+
+        # loss
+        loss = criterion(soft_labels, targets)
+
+        predicted = torch.argmax(logits, dim=1)
+
+        # Update metrics
+        metrics["batch_correct"] += (predicted == targets).sum().item()
+        metrics["batch_loss"] += loss.item()
+        metrics["batch_samples"] += targets.size(0)
+
+        # Bachward pass and optimize
+        loss.backward()
+        optimiser.step()
+
+    avg_loss = metrics["batch_loss"] / len(train_loader)
+    avg_acc = metrics["batch_correct"] / metrics["batch_samples"]
+    return avg_loss, avg_acc
+
+
+def train(model,
+          train_loader,
+          optimiser="SGD",
+          lr=0.1,
+          weight_decay=0,
+          ):
+
+    model = model.to(DEVICE)
+    criterion = nn.CrossEntropyLoss()
+    optim_dict = {"SGD": torch.optim.SGD(params=model.parameters(), lr=lr, weight_decay=weight_decay),
+                  "Adam": torch.optim.Adam(params=model.parameters(), lr=lr, weight_decay=weight_decay)}
+    optimiser = optim_dict[optimiser]
+
+    metrics = {
+        "batch_loss": 0.0,
+        "batch_correct": 0.0,
+        "batch_samples": 0.0
+    }
+
+    # set model on train mode
+    model.train()
+
+    # for each mini-batch
+    for inputs, targets in train_loader:
+        inputs, targets = inputs.to(DEVICE), targets.to(DEVICE)
+
+        optimiser.zero_grad()
+
+        # Forward pass
+        logits = model(inputs)
+        loss = criterion(logits, targets)
+
+        # Backward pass and optimize
+        loss.backward()
+        optimiser.step()
+
+        predicted = torch.argmax(logits, dim=1)
+
+        # Update metrics
+        metrics["batch_correct"] += (predicted == targets).sum().item()
+        metrics["batch_loss"] += loss.item()
+        metrics["batch_samples"] += targets.size(0)
+
+    avg_loss = metrics["batch_loss"] / len(train_loader)
+    avg_acc = metrics["batch_correct"] / metrics["batch_samples"]
+    return avg_loss, avg_acc
+
+
+def evaluate(model, dataloader):
+    model.eval()
+
+    criterion = nn.CrossEntropyLoss()
+
+    metrics = {
+        "eval_loss": 0.0,
+        "eval_correct": 0.0,
+        "eval_samples": 0.0
+    }
+
+    for inputs, targets in dataloader:
+        inputs, targets = inputs.to(DEVICE), targets.to(DEVICE)
+
+        # Forward pass
+        outputs = model(inputs)
+        loss = criterion(outputs, targets)
+
+        metrics["batch_loss"] += loss.item()
+        predicted = torch.argmax(outputs, dim=1)
+        metrics["eval_correct"] += (predicted == torch.argmax(targets, dim=1)).sum().item()
+        metrics["eval_samples"] += targets.size(0)
+
+    avg_loss = metrics["batch_loss"] / len(dataloader)
+    accuracy = metrics["eval_correct"] / metrics["eval_samples"]
+    return avg_loss, accuracy
+
+
+def predict(model, inputs):
+    model = model.to(DEVICE)
+    inputs = inputs.to(DEVICE)
+    return model(inputs)
+
+def compute_soft_labels(model, inputs):
+    logits = predict(model, inputs)
+    return F.softmax(torch.argmax(logits, dim=1))
