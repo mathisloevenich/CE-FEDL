@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from tqdm import tqdm
 from data import cifar_data, femnist_data
-from utils import evaluate
+from models import create_model
 from client import DistillationClient
 from strategy import DistillationStrategy
 
@@ -19,20 +19,25 @@ class Simulation:
 
     def __init__(self, config):
         self.num_clients = config["num_clients"]
+        self.client_participation = config["client_participation"]
+        self.client_epochs = config["client_epochs"]
         self.num_rounds = config["num_rounds"]
-        self.data_set_name = config["dataset_name"]
-        self.train_loaders, self.test_loaders,  = self.load_dataset(self.data_set_name)
+        self.server_epochs = config["server_epochs"]
+        self.dataset_name = config["data_set"]
+        self.train_loaders, self.test_loaders, self.public_loader = self.load_dataset(self.dataset_name)
         # don't need test_loaders so make public dataset by using it
         pub_trainloader = self.train_loaders[-1]  # last train set is public dataset
-        x_pub = torch.cat([batch_x for batch_x, _ in pub_trainloader])
-        y_pub = torch.cat([batch_y for _, batch_y in pub_trainloader])
+        self.public_data = torch.cat([batch_x for batch_x, _ in pub_trainloader])
+        self.public_labels = torch.cat([batch_y for _, batch_y in pub_trainloader])
         # print(x_pub.shape, y_pub.shape)
-        self.strategy = DistillationStrategy(x_pub, y_pub, config["dataset_name"])
+        sever_model = create_model(config["server_model"], self.dataset_name)
+        self.strategy = DistillationStrategy(sever_model, self.public_data)
         self.clients = [
-            self.client_fn(cid, x_pub, config["dataset_name"]) for cid in range(num_clients)]
-        num_samples = int(len(self.clients) * client_participation)
+            self.client_fn(cid, self.public_data, self.dataset_name)
+            for cid in range(self.num_clients)
+        ]
+        num_samples = int(len(self.clients) * self.client_participation)
         self.participating_clients = random.sample(self.clients, num_samples)
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
     def load_dataset(self, data_set):
         if data_set == "cifar":
@@ -40,15 +45,14 @@ class Simulation:
         elif data_set == "femnist":
             return femnist_data(combine_clients=self.num_clients + 1)
 
-    def client_fn(self, cid, x_pub, model_name):
+    def client_fn(self, cid, x_pub, model_architecture):
         train_loader = self.train_loaders[cid]
-        return DistillationClient(cid, train_loader, x_pub, model_name)
+        return DistillationClient(cid, train_loader, x_pub, model_architecture)
 
     def aggregate_soft_labels(self):
         """Get soft labels from clients and convert to float to aggregate them. """
-        sl_float = [client.get_soft_labels().float() for client in self.participating_clients]
-        aggregated_soft_labels = torch.mean(torch.stack(sl_float), dim=0)
-        return aggregated_soft_labels
+        soft_labels = [client.get_soft_labels() for client in self.participating_clients]
+        return torch.mean(torch.stack(soft_labels), dim=0)
 
     def run_simulation(self):
 
@@ -69,10 +73,10 @@ class Simulation:
                         )
                     )  # Distillation
 
-                client.fit()  # trains on training data and computes soft labels
+                client.fit(epochs=self.client_epochs)  # trains on training data and computes soft labels
 
             self.strategy.set_soft_labels(self.aggregate_soft_labels())
-            train_loss, train_accuracy = self.strategy.fit()  # trains and computes soft labels to distill
+            train_loss, train_accuracy = self.strategy.fit(epochs=self.server_epochs)
             # add some metrics to evaluate
             train_losses.append(train_loss)
             train_accuracies.append(train_accuracy)
@@ -140,6 +144,5 @@ if __name__ == "__main__":
     simulation = Simulation(config)
 
     print("Running on:", simulation.device)
-
-    print("Run Simulation")
+    print("Public data shape:", simulation.public_data.shape)
     simulation.run_simulation()

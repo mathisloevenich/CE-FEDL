@@ -25,8 +25,7 @@ def train_on_soft_labels(
         weight_decay=0,
 ):
     model = model.to(DEVICE)
-
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss().to(DEVICE)
     optim_dict = {"SGD": torch.optim.SGD(params=model.parameters(), lr=lr, weight_decay=weight_decay),
                   "Adam": torch.optim.Adam(params=model.parameters(), lr=lr, weight_decay=weight_decay)}
     optimiser = optim_dict[optimiser]
@@ -78,7 +77,7 @@ def train(model,
           ):
 
     model = model.to(DEVICE)
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss().to(DEVICE)
     optim_dict = {"SGD": torch.optim.SGD(params=model.parameters(), lr=lr, weight_decay=weight_decay),
                   "Adam": torch.optim.Adam(params=model.parameters(), lr=lr, weight_decay=weight_decay)}
     optimiser = optim_dict[optimiser]
@@ -121,7 +120,7 @@ def train(model,
 def evaluate(model, dataloader):
     model.eval()
 
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss().to(DEVICE)
 
     metrics = {
         "eval_loss": 0.0,
@@ -150,6 +149,7 @@ def predict(model, inputs):
     model = model.to(DEVICE)
     inputs = inputs.to(DEVICE)
     return model(inputs)
+
 
 def compute_soft_labels(model, inputs):
     logits = predict(model, inputs)

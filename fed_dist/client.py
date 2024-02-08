@@ -39,7 +39,7 @@ class DistillationClient:
     def get_soft_labels(self):
         return self.soft_labels
 
-    def train(self, train_loader):
+    def train(self, train_loader, epochs=1):
         return train(self.model, train_loader)
 
     def fit(self):

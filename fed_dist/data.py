@@ -114,6 +114,7 @@ def femnist_data(path_to_data_folder="femnist_data", combine_clients=20, subset=
     subset_testloaders = random.sample(all_client_testloaders, subset)
     return subset_trainloaders, subset_testloaders
 
+
 def cifar_data(num_clients=50, balanced_data=False):
     """
     Returns: a tuple containing the training data loaders, and test data loaders,
