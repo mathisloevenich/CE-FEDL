@@ -7,7 +7,7 @@ from torch import nn
 from torchvision.models import resnet18
 
 
-def create_model(dataset_name):
+def create_model(dataset_name, seed=47):
     """
     Input: Dataset name: can be 'femnist' or 'cifar'
     """
@@ -20,7 +20,7 @@ def create_model(dataset_name):
         image_size=32
         num_classes=10
 
-    torch.manual_seed(47)
+    torch.manual_seed(seed)
     return CNN500k(num_channels, image_size, num_classes)
 
 
