@@ -22,16 +22,25 @@ class DistillationStrategy:
     def get_soft_labels(self):
         return self.y_pub_distill
 
-    def train(self):
-        return train_on_soft_labels(
-            self.model,
-            DataLoader(TensorDataset(self.x_pub, self.y_pub_distill), batch_size=32)
-        )
+    def train(self, epochs=1):
 
-    def fit(self):
+        history = {
+            "losses": [],
+            "accuracies": []
+        }
+
+        public_loader = DataLoader(TensorDataset(self.x_pub, self.y_pub_distill), batch_size=32)
+        for epoch in range(epochs):
+            loss, acc = train_on_soft_labels(self.model, public_loader)
+            history["losses"].append(loss)
+            history["accuracies"].append(acc)
+
+        return sum(history["losses"]) / epochs, sum(history["accuracies"]) / epochs
+
+    def fit(self, epochs=1):
         """Trains on x_pub and y_pub, computes new soft labels to distill to the clients"""
-        avg_loss, accuracy = self.train()
-        self.y_pub_distill = self.compute_soft_labels()
+        avg_loss, accuracy = self.train(epochs)
+        self.y_pub_distill = compute_soft_labels(self.model, self.x_pub)
         return avg_loss, accuracy
 
     def evaluate(self, test_loader):

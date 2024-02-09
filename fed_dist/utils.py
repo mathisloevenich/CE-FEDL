@@ -32,9 +32,8 @@ def train_on_soft_labels(
 
     metrics = {
         "batch_loss": 0.0,
-        "total_loss": 0.0,
-        "accuracy": 0.0,
-        # Add other metrics you want to track
+        "batch_correct": 0.0,
+        "batch_samples": 0.0
     }
 
     # set model on train mode
@@ -48,7 +47,7 @@ def train_on_soft_labels(
 
         # forward pass
         logits = model(inputs)
-        soft_labels = F.log_softmax(logits, dim=1)
+        soft_labels = F.softmax(logits, dim=1)
 
         # loss
         loss = criterion(soft_labels, targets)
@@ -120,6 +119,8 @@ def train(model,
 def evaluate(model, dataloader):
     model.eval()
 
+    model = model.to(DEVICE)
+
     criterion = nn.CrossEntropyLoss().to(DEVICE)
 
     metrics = {
@@ -128,17 +129,18 @@ def evaluate(model, dataloader):
         "eval_samples": 0.0
     }
 
-    for inputs, targets in dataloader:
-        inputs, targets = inputs.to(DEVICE), targets.to(DEVICE)
+    with torch.no_grad():
+        for inputs, targets in dataloader:
+            inputs, targets = inputs.to(DEVICE), targets.to(DEVICE)
 
-        # Forward pass
-        outputs = model(inputs)
-        loss = criterion(outputs, targets)
+            # Forward pass
+            outputs = model(inputs)
+            loss = criterion(outputs, targets)
 
-        metrics["batch_loss"] += loss.item()
-        predicted = torch.argmax(outputs, dim=1)
-        metrics["eval_correct"] += (predicted == torch.argmax(targets, dim=1)).sum().item()
-        metrics["eval_samples"] += targets.size(0)
+            metrics["batch_loss"] += loss.item()
+            predicted = torch.argmax(outputs, dim=1)
+            metrics["eval_correct"] += (predicted == torch.argmax(targets, dim=1)).sum().item()
+            metrics["eval_samples"] += targets.size(0)
 
     avg_loss = metrics["batch_loss"] / len(dataloader)
     accuracy = metrics["eval_correct"] / metrics["eval_samples"]
@@ -146,11 +148,11 @@ def evaluate(model, dataloader):
 
 
 def predict(model, inputs):
-    model = model.to(DEVICE)
-    inputs = inputs.to(DEVICE)
-    return model(inputs)
+    with torch.no_grad():
+        model, inputs = model.to(DEVICE), inputs.to(DEVICE)
+        return model(inputs)
 
 
 def compute_soft_labels(model, inputs):
     logits = predict(model, inputs)
-    return F.softmax(torch.argmax(logits, dim=1))
+    return F.softmax(logits, dim=1)

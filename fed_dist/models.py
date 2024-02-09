@@ -9,6 +9,7 @@ from utils import DEVICE
 
 SEED = 42
 
+
 def create_model(architecture, dataset_name, seed=SEED):
     if seed is None:
         seed = SEED
@@ -43,6 +44,7 @@ def create_cnn500k(dataset_name, seed=SEED):
     if DEVICE == "cuda":
         torch.cuda.manual_seed(seed)
     return CNN500k(num_channels, image_size, num_classes)
+
 
 class CNN500k(nn.Module):
     def __init__(self, num_channels, image_size, num_classes):

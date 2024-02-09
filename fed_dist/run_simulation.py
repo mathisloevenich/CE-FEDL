@@ -9,6 +9,7 @@ import pandas as pd
 from torch.utils.data import DataLoader, TensorDataset
 
 from tqdm import tqdm
+from utils import DEVICE
 from data import cifar_data, femnist_data
 from models import create_model
 from client import DistillationClient
@@ -17,23 +18,25 @@ from strategy import DistillationStrategy
 
 class Simulation:
 
-    def __init__(self, config):
-        self.num_clients = config["num_clients"]
-        self.client_participation = config["client_participation"]
-        self.client_epochs = config["client_epochs"]
-        self.num_rounds = config["num_rounds"]
-        self.server_epochs = config["server_epochs"]
-        self.dataset_name = config["data_set"]
-        self.train_loaders, self.test_loaders, self.public_loader = self.load_dataset(self.dataset_name)
-        # don't need test_loaders so make public dataset by using it
-        pub_trainloader = self.train_loaders[-1]  # last train set is public dataset
-        self.public_data = torch.cat([batch_x for batch_x, _ in pub_trainloader])
-        self.public_labels = torch.cat([batch_y for _, batch_y in pub_trainloader])
-        # print(x_pub.shape, y_pub.shape)
-        sever_model = create_model(config["server_model"], self.dataset_name)
+    def __init__(self, conf):
+        self.num_clients = conf["num_clients"]
+        self.client_participation = conf["client_participation"]
+        self.client_epochs = conf["client_epochs"]
+        self.client_architecture = conf["client_model"]
+        self.num_rounds = conf["num_rounds"]
+        self.server_epochs = conf["server_epochs"]
+        self.server_architecture = conf["server_model"]
+        self.dataset_name = conf["data_set"]
+
+        # load dataset
+        self.train_loaders, self.test_loader, self.public_loader = self.load_dataset(self.dataset_name)
+        self.public_data = torch.cat([batch_x for batch_x, _ in self.public_loader])
+        self.public_labels = torch.cat([batch_y for _, batch_y in self.public_loader])
+
+        sever_model = create_model(self.server_architecture, self.dataset_name)  # create server model
         self.strategy = DistillationStrategy(sever_model, self.public_data)
         self.clients = [
-            self.client_fn(cid, self.public_data, self.dataset_name)
+            self.client_fn(cid, self.public_data, self.client_architecture)
             for cid in range(self.num_clients)
         ]
         num_samples = int(len(self.clients) * self.client_participation)
@@ -41,13 +44,13 @@ class Simulation:
 
     def load_dataset(self, data_set):
         if data_set == "cifar":
-            return cifar_data(self.num_clients + 1, balanced_data=True)  # get one more for public dataset
+            return cifar_data(self.num_clients, balanced_data=True)  # get one more for public dataset
         elif data_set == "femnist":
-            return femnist_data(combine_clients=self.num_clients + 1)
+            return femnist_data(combine_clients=self.num_clients)
 
     def client_fn(self, cid, x_pub, model_architecture):
         train_loader = self.train_loaders[cid]
-        return DistillationClient(cid, train_loader, x_pub, model_architecture)
+        return DistillationClient(cid, train_loader, x_pub, model_architecture, self.dataset_name)
 
     def aggregate_soft_labels(self):
         """Get soft labels from clients and convert to float to aggregate them. """
@@ -56,66 +59,72 @@ class Simulation:
 
     def run_simulation(self):
 
-        train_losses, val_losses = [], []
-        train_accuracies, val_accuracies = [], []
+        history = {
+            "train_losses": [],
+            "train_accuracies": [],
+            "val_losses": [],
+            "val_accuracies": []
+        }
 
         for t in range(1, self.num_rounds + 1):
             print("Round: ", t)
+
+            # only allocate once for every client
+            client_loader = DataLoader(
+                TensorDataset(self.strategy.get_x_pub(), self.strategy.get_soft_labels()),
+                batch_size=32
+            )
+
             for client in tqdm(self.participating_clients, desc="Training clients"):
                 client.initialize()  # initialize client model (new)
 
                 # only train after first round and distill public model soft label information
                 if t > 1:
-                    client.train(
-                        DataLoader(
-                            TensorDataset(self.strategy.get_x_pub(), self.strategy.get_soft_labels()),
-                            batch_size=32
-                        )
-                    )  # Distillation
+                    client.train(client_loader, train_fn="train_sl")  # Distillation
 
                 client.fit(epochs=self.client_epochs)  # trains on training data and computes soft labels
 
             self.strategy.set_soft_labels(self.aggregate_soft_labels())
             train_loss, train_accuracy = self.strategy.fit(epochs=self.server_epochs)
+
             # add some metrics to evaluate
-            train_losses.append(train_loss)
-            train_accuracies.append(train_accuracy)
+            history["train_losses"].append(train_loss)
+            history["train_accuracies"].append(train_accuracy)
 
             # evaluate on random test_loader from test_loaders
-            val_loss, val_accuracy = self.strategy.evaluate(self.test_loaders[random.randint(0, self.num_clients)])
-            val_losses.append(val_loss)
-            val_accuracies.append(val_accuracy)
+            val_loss, val_accuracy = self.strategy.evaluate(self.test_loader)
+            history["val_losses"].append(val_loss)
+            history["val_accuracies"].append(val_accuracy)
 
             print(f"Train Loss: {train_loss:.4f}, Train Accuracy: {train_accuracy:.4f}")
             print(f"Eval Loss: {val_loss:.4f}, Eval Accuracy: {val_accuracy:.4f}")
 
-            # server.train(public_data, aggregated_labels)
-            # server_soft_labels = server.compute_soft_labels(public_data)
-            # server.compress_labels(server_soft_labels, bdown)
+        self.save_data(self.strategy.model, history)
 
-        self.save_data(train_losses, train_accuracies, val_losses, val_accuracies)
-
-    def save_data(self, train_losses, train_accuracies, val_losses, val_accuracies):
+    def save_data(self, model, history):
 
         data = pd.DataFrame({
             'round': list(range(1, self.num_rounds + 1)),
-            'train_loss': train_losses,
-            'train_accuracy': train_accuracies,
-            'val_loss': val_losses,
-            'val_accuracies': val_accuracies
+            'train_loss': history["train_losses"],
+            'train_accuracy': history["train_accuracies"],
+            'val_loss': history["val_losses"],
+            'val_accuracies': history["val_accuracies"]
         })
 
         # Dateipfad
         directory = "results_data"
 
+        path_prefix = (
+            f"{directory}/{self.server_architecture}-{self.dataset_name}-cl{self.num_clients}-nr{self.num_rounds}"
+        )
+
         index = 1
-        while True:
-            file_path = f"{directory}/{self.data_set_name}-cl{self.num_clients}-nr{self.num_rounds}_{index}.csv"
-            if os.path.exists(file_path):
-                index += 1
-            else:
-                data.to_csv(file_path, index=False)
-                break
+        while os.path.exists(f"{path_prefix}_{index}.csv"):
+            index += 1
+
+        data.to_csv(f"{path_prefix}_{index}.csv", index=False)
+
+        torch.save(model.state_dict(), f"{path_prefix}_{index}_model.pth")
 
 
 if __name__ == "__main__":
@@ -136,13 +145,16 @@ if __name__ == "__main__":
         "client_participation": 1.0,
         "client_optimiser": "Adam",
         "client_model": "cnn500k",
-        "server_epochs": 3,
+        "server_epochs": 1,
         "server_optimiser": "Adam",
         "server_model": "cnn500k",
     }
 
     simulation = Simulation(config)
 
-    print("Running on:", simulation.device)
+    print("Running on:", DEVICE)
+    if DEVICE == "cuda":
+        torch.cuda.empty_cache()
     print("Public data shape:", simulation.public_data.shape)
+    print("Public labels shape:", simulation.public_labels.shape)
     simulation.run_simulation()
