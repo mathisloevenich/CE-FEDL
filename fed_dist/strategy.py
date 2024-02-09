@@ -11,7 +11,7 @@ class DistillationStrategy:
         # take resnet models
         self.model = model
         self.x_pub = x_pub  # fixed dataset
-        self.y_pub_distill = None  # server computed soft labels
+        self.y_pub_distill = torch.rand((len(self.x_pub), 32))  # server computed soft labels
 
     def get_x_pub(self):
         return self.x_pub

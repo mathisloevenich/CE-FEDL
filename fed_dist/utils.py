@@ -52,10 +52,11 @@ def train_on_soft_labels(
         # loss
         loss = criterion(soft_labels, targets)
 
-        predicted = torch.argmax(logits, dim=1)
+        predicted_labels = torch.argmax(logits, dim=1)
+        true_labels = torch.argmax(targets, dim=1)
 
         # Update metrics
-        metrics["batch_correct"] += (predicted == targets).sum().item()
+        metrics["batch_correct"] += (predicted_labels == true_labels).sum().item()
         metrics["batch_loss"] += loss.item()
         metrics["batch_samples"] += targets.size(0)
 
@@ -137,17 +138,18 @@ def evaluate(model, dataloader):
             outputs = model(inputs)
             loss = criterion(outputs, targets)
 
-            metrics["batch_loss"] += loss.item()
+            metrics["eval_loss"] += loss.item()
             predicted = torch.argmax(outputs, dim=1)
-            metrics["eval_correct"] += (predicted == torch.argmax(targets, dim=1)).sum().item()
+            metrics["eval_correct"] += (predicted == targets).sum().item()
             metrics["eval_samples"] += targets.size(0)
 
-    avg_loss = metrics["batch_loss"] / len(dataloader)
+    avg_loss = metrics["eval_loss"] / len(dataloader)
     accuracy = metrics["eval_correct"] / metrics["eval_samples"]
     return avg_loss, accuracy
 
 
 def predict(model, inputs):
+    # do not allocate gradients to memory
     with torch.no_grad():
         model, inputs = model.to(DEVICE), inputs.to(DEVICE)
         return model(inputs)

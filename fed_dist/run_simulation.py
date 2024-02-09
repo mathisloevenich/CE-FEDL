@@ -141,7 +141,7 @@ if __name__ == "__main__":
         "num_clients": args.num_clients,
         "num_rounds": args.num_rounds,
         "data_set": args.data_set,
-        "client_epochs": 1,
+        "client_epochs": 3,
         "client_participation": 1.0,
         "client_optimiser": "Adam",
         "client_model": "cnn500k",
