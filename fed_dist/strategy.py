@@ -6,12 +6,13 @@ from utils import train_on_soft_labels, evaluate, compute_soft_labels
 
 class DistillationStrategy:
 
-    def __init__(self, model, x_pub):
+    def __init__(self, model, x_pub, optimiser="Adam"):
 
         # take resnet models
         self.model = model
         self.x_pub = x_pub  # fixed dataset
         self.y_pub_distill = torch.rand((len(self.x_pub), 32))  # server computed soft labels
+        self.optimiser = optimiser
 
     def get_x_pub(self):
         return self.x_pub
@@ -29,9 +30,12 @@ class DistillationStrategy:
             "accuracies": []
         }
 
-        public_loader = DataLoader(TensorDataset(self.x_pub, self.y_pub_distill), batch_size=32)
+        public_loader = DataLoader(
+            TensorDataset(self.x_pub, self.y_pub_distill),
+            batch_size=32
+        )
         for epoch in range(epochs):
-            loss, acc = train_on_soft_labels(self.model, public_loader)
+            loss, acc = train_on_soft_labels(self.model, public_loader, optimiser=self.optimiser)
             history["losses"].append(loss)
             history["accuracies"].append(acc)
 

@@ -7,6 +7,7 @@ import os
 import pandas as pd
 
 from torch.utils.data import DataLoader, TensorDataset
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 from tqdm import tqdm
 from utils import DEVICE
@@ -22,19 +23,26 @@ class Simulation:
         self.num_clients = conf["num_clients"]
         self.client_participation = conf["client_participation"]
         self.client_epochs = conf["client_epochs"]
+        self.client_dist_epochs = conf["client_epochs"]
         self.client_architecture = conf["client_model"]
+        self.client_optimiser = conf["client_optimiser"]
         self.num_rounds = conf["num_rounds"]
         self.server_epochs = conf["server_epochs"]
         self.server_architecture = conf["server_model"]
+        self.server_optimiser = conf["server_optimiser"]
         self.dataset_name = conf["data_set"]
+        self.public_data_ratio = conf["public_data_ratio"]
 
         # load dataset
-        self.train_loaders, self.test_loader, self.public_loader = self.load_dataset(self.dataset_name)
+        self.train_loaders, self.test_loader, self.public_loader = self.load_dataset(
+            self.dataset_name,
+            public_data_ratio=self.public_data_ratio
+        )
         self.public_data = torch.cat([batch_x for batch_x, _ in self.public_loader])
         self.public_labels = torch.cat([batch_y for _, batch_y in self.public_loader])
 
         sever_model = create_model(self.server_architecture, self.dataset_name)  # create server model
-        self.strategy = DistillationStrategy(sever_model, self.public_data)
+        self.strategy = DistillationStrategy(sever_model, self.public_data, self.server_optimiser)
         self.clients = [
             self.client_fn(cid, self.public_data, self.client_architecture)
             for cid in range(self.num_clients)
@@ -42,20 +50,40 @@ class Simulation:
         num_samples = int(len(self.clients) * self.client_participation)
         self.participating_clients = random.sample(self.clients, num_samples)
 
-    def load_dataset(self, data_set):
+    def load_dataset(self, data_set, public_data_ratio=0.2):
         if data_set == "cifar":
-            return cifar_data(self.num_clients, balanced_data=True)  # get one more for public dataset
+            return cifar_data(
+                self.num_clients,
+                balanced_data=True,
+                public_data_ratio=public_data_ratio
+            )  # get one more for public dataset
         elif data_set == "femnist":
             return femnist_data(combine_clients=self.num_clients)
 
     def client_fn(self, cid, x_pub, model_architecture):
         train_loader = self.train_loaders[cid]
-        return DistillationClient(cid, train_loader, x_pub, model_architecture, self.dataset_name)
+        return DistillationClient(
+            cid, train_loader, x_pub,
+            model_architecture,
+            self.dataset_name,
+            optimiser=self.client_optimiser
+        )
+
+    @staticmethod
+    def train_client(client, client_loader, t, client_dist_epochs, client_epochs):
+        client.initialize()  # initialize client model (new)
+
+        # only train after first round and distill public model soft label information
+        if t > 1:
+            client.train(client_loader, train_fn="train_sl", epochs=client_dist_epochs)  # Distillation
+
+        client.fit(epochs=client_epochs)  # trains on training data and computes soft labels
+        return client
 
     def aggregate_soft_labels(self):
         """Get soft labels from clients and convert to float to aggregate them. """
         soft_labels = [client.get_soft_labels() for client in self.participating_clients]
-        return torch.mean(torch.stack(soft_labels), dim=0)
+        return torch.mean(torch.stack(soft_labels, dim=0), dim=0)
 
     def run_simulation(self):
 
@@ -80,7 +108,7 @@ class Simulation:
 
                 # only train after first round and distill public model soft label information
                 if t > 1:
-                    client.train(client_loader, train_fn="train_sl")  # Distillation
+                    client.train(client_loader, train_fn="train_sl", epochs=self.client_dist_epochs)  # Distillation
 
                 client.fit(epochs=self.client_epochs)  # trains on training data and computes soft labels
 
@@ -142,19 +170,19 @@ if __name__ == "__main__":
         "num_rounds": args.num_rounds,
         "data_set": args.data_set,
         "client_epochs": 3,
+        "client_dist_epochs": 1,
         "client_participation": 1.0,
         "client_optimiser": "Adam",
-        "client_model": "cnn500k",
-        "server_epochs": 1,
+        "client_model": "resnet18",
+        "server_epochs": 3,
         "server_optimiser": "Adam",
-        "server_model": "cnn500k",
+        "server_model": "resnet18",
+        "public_data_ratio": 0.2
     }
 
     simulation = Simulation(config)
 
     print("Running on:", DEVICE)
-    if DEVICE == "cuda":
-        torch.cuda.empty_cache()
     print("Public data shape:", simulation.public_data.shape)
     print("Public labels shape:", simulation.public_labels.shape)
     simulation.run_simulation()

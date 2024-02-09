@@ -15,7 +15,9 @@ class DistillationClient:
             train_loader: DataLoader,
             x_pub,
             model_architecture="cnn500k",
-            dataset_name="cifar"):
+            dataset_name="cifar",
+            optimiser="Adam"
+    ):
         self.cid = cid
         self.train_loader = train_loader
         self.x_pub = x_pub  # fixed public data
@@ -23,6 +25,7 @@ class DistillationClient:
         self.model = None
         self.model_architecture = model_architecture
         self.dataset_name = dataset_name
+        self.optimiser = optimiser
 
     def initialize(self, rand=True):
         seed = random.randint(0, 1000) if rand else None
@@ -47,7 +50,7 @@ class DistillationClient:
         }
 
         for epoch in range(epochs):
-            loss, acc = methods[train_fn](self.model, train_loader)
+            loss, acc = methods[train_fn](self.model, train_loader, optimiser=self.optimiser)
             history["losses"].append(loss)
             history["accuracies"].append(acc)
 

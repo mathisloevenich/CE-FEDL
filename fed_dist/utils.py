@@ -26,6 +26,7 @@ def train_on_soft_labels(
 ):
     model = model.to(DEVICE)
     criterion = nn.CrossEntropyLoss().to(DEVICE)
+    # criterion = nn.KLDivLoss(reduction='batchmean').to(DEVICE)
     optim_dict = {"SGD": torch.optim.SGD(params=model.parameters(), lr=lr, weight_decay=weight_decay),
                   "Adam": torch.optim.Adam(params=model.parameters(), lr=lr, weight_decay=weight_decay)}
     optimiser = optim_dict[optimiser]
@@ -47,10 +48,8 @@ def train_on_soft_labels(
 
         # forward pass
         logits = model(inputs)
-        soft_labels = F.softmax(logits, dim=1)
 
-        # loss
-        loss = criterion(soft_labels, targets)
+        loss = criterion(logits, targets)
 
         predicted_labels = torch.argmax(logits, dim=1)
         true_labels = torch.argmax(targets, dim=1)
@@ -135,11 +134,11 @@ def evaluate(model, dataloader):
             inputs, targets = inputs.to(DEVICE), targets.to(DEVICE)
 
             # Forward pass
-            outputs = model(inputs)
-            loss = criterion(outputs, targets)
+            logits = model(inputs)
+            loss = criterion(logits, targets)
 
             metrics["eval_loss"] += loss.item()
-            predicted = torch.argmax(outputs, dim=1)
+            predicted = torch.argmax(logits, dim=1)
             metrics["eval_correct"] += (predicted == targets).sum().item()
             metrics["eval_samples"] += targets.size(0)
 
