@@ -8,7 +8,7 @@ import numpy as np
 import torch
 from fedlab.utils.dataset.partition import CIFAR10Partitioner
 from torch.utils.data import DataLoader, random_split
-from torchvision.datasets import CIFAR10
+from torchvision.datasets import CIFAR10, STL10
 from tqdm import tqdm
 
 
@@ -113,7 +113,7 @@ def femnist_data(path_to_data_folder="femnist_data", combine_clients=20, subset=
     return subset_trainloaders, subset_testloaders
 
 
-def cifar_data(num_clients=50, balanced_data=False, public_data_ratio=0.2):
+def cifar_data(num_clients=50, balanced_data=False, public_data_size=10000):
     """
     Returns: a tuple containing the training data loaders, and test data loaders,
              with a dataloader for each client
@@ -158,16 +158,19 @@ def cifar_data(num_clients=50, balanced_data=False, public_data_ratio=0.2):
 
         all_client_trainloaders.append(train_loader)
 
-    client_dataset_size = int(len(x_train) * public_data_ratio)
-
     eval_loader = DataLoader(
-        dataset=list(zip(x_test[:client_dataset_size], y_test[:client_dataset_size])),
+        dataset=list(zip(x_test, y_test)),
         batch_size=32, shuffle=True, pin_memory=True
     )
 
     public_loader = DataLoader(
-        dataset=list(zip(x_train[:client_dataset_size], y_train[:client_dataset_size])),
-        batch_size=32, shuffle=True, pin_memory=True
+        dataset=x_train[:public_data_size], batch_size=32, shuffle=True, pin_memory=True
     )
+
+    # # load STL-10 dataset for public stl_data
+    # # Laden des STL-10 Trainingsdatensatzes
+    # public_dataset = STL10(root='./stl_data', split='unlabeled', download=True)
+    # x_public = (public_dataset.data / 255.0).astype(np.float32).transpose((0, 3, 1, 2))
+    # public_loader = DataLoader(x_public[:public_data_size], batch_size=32, shuffle=True, pin_memory=True)
 
     return all_client_trainloaders, eval_loader, public_loader

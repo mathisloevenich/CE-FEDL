@@ -31,15 +31,15 @@ class Simulation:
         self.server_architecture = conf["server_model"]
         self.server_optimiser = conf["server_optimiser"]
         self.dataset_name = conf["data_set"]
-        self.public_data_ratio = conf["public_data_ratio"]
+        self.public_data_size = conf["public_data_size"]
 
         # load dataset
         self.train_loaders, self.test_loader, self.public_loader = self.load_dataset(
             self.dataset_name,
-            public_data_ratio=self.public_data_ratio
+            public_data_size=self.public_data_size
         )
-        self.public_data = torch.cat([batch_x for batch_x, _ in self.public_loader])
-        self.public_labels = torch.cat([batch_y for _, batch_y in self.public_loader])
+        self.public_data = torch.cat([batch_x for batch_x in self.public_loader])
+        # self.public_labels = torch.cat([batch_y for _, batch_y in self.public_loader])
 
         sever_model = create_model(self.server_architecture, self.dataset_name)  # create server model
         self.strategy = DistillationStrategy(sever_model, self.public_data, self.server_optimiser)
@@ -50,12 +50,12 @@ class Simulation:
         num_samples = int(len(self.clients) * self.client_participation)
         self.participating_clients = random.sample(self.clients, num_samples)
 
-    def load_dataset(self, data_set, public_data_ratio=0.2):
+    def load_dataset(self, data_set, public_data_size=10000):
         if data_set == "cifar":
             return cifar_data(
                 self.num_clients,
                 balanced_data=True,
-                public_data_ratio=public_data_ratio
+                public_data_size=public_data_size
             )  # get one more for public dataset
         elif data_set == "femnist":
             return femnist_data(combine_clients=self.num_clients)
@@ -170,19 +170,18 @@ if __name__ == "__main__":
         "num_rounds": args.num_rounds,
         "data_set": args.data_set,
         "client_epochs": 3,
-        "client_dist_epochs": 1,
+        "client_dist_epochs": 3,
         "client_participation": 1.0,
         "client_optimiser": "Adam",
         "client_model": "resnet18",
-        "server_epochs": 3,
+        "server_epochs": 6,
         "server_optimiser": "Adam",
         "server_model": "resnet18",
-        "public_data_ratio": 0.2
+        "public_data_size": 50000
     }
 
     simulation = Simulation(config)
 
     print("Running on:", DEVICE)
     print("Public data shape:", simulation.public_data.shape)
-    print("Public labels shape:", simulation.public_labels.shape)
     simulation.run_simulation()

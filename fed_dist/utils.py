@@ -71,7 +71,7 @@ def train_on_soft_labels(
 def train(model,
           train_loader,
           optimiser="SGD",
-          lr=0.1,
+          lr=0.01,
           weight_decay=0,
           ):
 
