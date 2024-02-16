@@ -3,11 +3,31 @@
 
 import torch
 from torch import nn
+import torchvision.models as models
 
-from torchvision.models import resnet18
+from utils import DEVICE
+
+SEED = 42
 
 
-def create_model(dataset_name, seed=47):
+def create_model(architecture, dataset_name, seed=SEED):
+    if seed is None:
+        seed = SEED
+
+    torch.manual_seed(seed)
+    if DEVICE == "cuda":
+        torch.cuda.manual_seed(seed)
+
+    if architecture == "cnn500k":
+        return create_cnn500k(dataset_name, seed)
+    if architecture == "resnet18":
+        if dataset_name == "femnist":
+            return models.resnet18(num_classes=62)  # 62 classes in FEMNIST dataset
+        elif dataset_name == "cifar":
+            return models.resnet18(num_classes=10)  # 10 classes in CIFAR dataset
+
+
+def create_cnn500k(dataset_name, seed=SEED):
     """
     Input: Dataset name: can be 'femnist' or 'cifar'
     """
@@ -21,6 +41,8 @@ def create_model(dataset_name, seed=47):
         num_classes=10
 
     torch.manual_seed(seed)
+    if DEVICE == "cuda":
+        torch.cuda.manual_seed(seed)
     return CNN500k(num_channels, image_size, num_classes)
 
 
@@ -56,17 +78,3 @@ class CNN500k(nn.Module):
 
     def forward(self, x):
         return self.layer_stack(x)
-
-
-def get_resnet18_femnist(seed=47):
-    torch.manual_seed(seed)
-    femnist_model = resnet18(num_classes=62)
-    femnist_model.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
-
-    return femnist_model
-
-def get_resnet18_cifar10(seed=47):
-    torch.manual_seed(seed)
-    cifar10_model = resnet18(num_classes=10)
-
-    return cifar10_model
