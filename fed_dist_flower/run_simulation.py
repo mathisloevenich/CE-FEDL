@@ -22,7 +22,6 @@ class Simulation:
 
     def __init__(self, conf):
         self.num_clients = conf["num_clients"]
-        self.client_participation = conf["client_participation"]
         self.client_epochs = conf["client_epochs"]
         self.client_dist_epochs = conf["client_epochs"]
         self.client_architecture = conf["client_model"]
@@ -36,7 +35,7 @@ class Simulation:
 
         strategy_conf = {
             **conf,
-            "fraction_fit": 1.0,
+            "fraction_fit": conf["client_participation"],
             "fraction_evaluate": 1.0,
             "min_fit_clients": 2,
             "min_evaluate_clients": 2,
@@ -49,7 +48,6 @@ class Simulation:
             public_data_size=self.public_data_size
         )
         self.public_data = torch.cat([batch_x for batch_x in self.public_loader])
-        # self.public_labels = torch.cat([batch_y for _, batch_y in self.public_loader])
 
         server_model = create_model(self.server_architecture, self.dataset_name)  # create server model
         self.strategy = FedStrategy(
@@ -86,7 +84,7 @@ class Simulation:
         if DEVICE == "cuda":
             client_resources = {"num_gpus": 1, "num_cpus": 1}
 
-        history = fl.simulation.start_simulation(
+        sim_hist = fl.simulation.start_simulation(
             client_fn=self.client_fn,
             num_clients=self.num_clients,
             config=fl.server.ServerConfig(num_rounds=self.num_rounds),
@@ -94,17 +92,23 @@ class Simulation:
             client_resources=client_resources
         )
 
-        return history
+        print(sim_hist.metrics_distributed)
+
+        _, losses = zip(*sim_hist.losses_distributed)
+        _, accuracies = zip(*sim_hist.metrics_distributed["accuracy"])
+
+        hist = {
+            "round": list(range(1, self.num_rounds + 1)),
+            "losses": losses,
+            "accuracies": accuracies
+        }
+
+        # save data
+        simulation.save_data(hist)
 
     def save_data(self, history):
 
-        data = pd.DataFrame({
-            'round': list(range(1, self.num_rounds + 1)),
-            'train_loss': history["train_losses"],
-            'train_accuracy': history["train_accuracies"],
-            'val_loss': history["val_losses"],
-            'val_accuracies': history["val_accuracies"]
-        })
+        data = pd.DataFrame(history)
 
         # Dateipfad
         directory = "results_data"
@@ -146,7 +150,7 @@ if __name__ == "__main__":
         "server_epochs": 10,
         "server_optimiser": "Adam",
         "server_model": "cnn500k",
-        "public_data_size": 1000,
+        "public_data_size": 2000,
     }
 
     simulation = Simulation(config)
@@ -156,11 +160,9 @@ if __name__ == "__main__":
 
     # start calculation runtime
     start = datetime.now()
-    hist = simulation.run_simulation()
+    simulation.run_simulation()
     end = datetime.now()
 
     total_runtime = end - start
     print("Total runtime: ", total_runtime)
 
-    # save data
-    simulation.save_data(hist)
