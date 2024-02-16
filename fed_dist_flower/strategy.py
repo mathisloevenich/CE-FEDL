@@ -1,5 +1,7 @@
 
 import random
+
+import numpy as np
 import torch
 
 from typing import List, Tuple, Union, Optional, Dict
@@ -21,7 +23,7 @@ from flwr.server.strategy import FedAvg
 from flwr.server.strategy.aggregate import aggregate, weighted_loss_avg
 from torch.utils.data import DataLoader, TensorDataset
 
-from utils import get_parameters, train_on_soft_labels, compute_soft_labels
+from utils import get_parameters, train_on_soft_labels, compute_soft_labels, parameters_to_tensor, tensor_to_parameters
 
 
 class FedStrategy(FedAvg):
@@ -29,27 +31,23 @@ class FedStrategy(FedAvg):
         self,
         model,
         x_pub,
-        optimiser="Adam",
-        fraction_fit: float = 1.0,
-        fraction_evaluate: float = 1.0,
-        min_fit_clients: int = 2,
-        min_evaluate_clients: int = 2,
-        min_available_clients: int = 2,
+        conf,
     ) -> None:
         super().__init__()
         self.model = model
         self.x_pub = x_pub
-        self.y_pub_distill = torch.rand((len(self.x_pub), 32))  # server computed soft labels
-        self.client_epochs = 1
-        self.client_dist_epochs = 1
-        self.server_epochs = 1
-        self.optimiser = optimiser
+        self.dist_parameters = torch.rand((len(self.x_pub), 32))  # server computed soft labels
+        self.client_epochs = conf["client_epochs"]
+        self.client_dist_epochs = conf["client_dist_epochs"]
+        self.server_epochs = conf["server_epochs"]
+        self.optimiser = conf["server_optimiser"]
+        self.verbose = conf["verbose"]
 
-        self.fraction_fit = fraction_fit
-        self.fraction_evaluate = fraction_evaluate
-        self.min_fit_clients = min_fit_clients
-        self.min_evaluate_clients = min_evaluate_clients
-        self.min_available_clients = min_available_clients
+        self.fraction_fit = conf["fraction_fit"]
+        self.fraction_evaluate = conf["fraction_evaluate"]
+        self.min_fit_clients = conf["min_fit_clients"]
+        self.min_evaluate_clients = conf["min_evaluate_clients"]
+        self.min_available_clients = conf["min_available_clients"]
 
     def initialize_parameters(self, client_manager: ClientManager) -> Optional[Parameters]:
         """Initialize global model parameters."""
@@ -71,31 +69,37 @@ class FedStrategy(FedAvg):
             min_num_clients=min_num_clients
         )
 
+        # dist_soft_labels = tensor_to_parameters(self.dist_parameters)
+
         # return the sampled clients
         fit_ins = FitIns(
             parameters, {
-                "epochs": self.client_epochs,
+                "client_epochs": self.client_epochs,
                 "server_round": server_round,
-                "client_dist_epochs": self.client_dist_epochs
+                "client_dist_epochs": self.client_dist_epochs,
+                "verbose": self.verbose
             }
         )
         return [(client, fit_ins) for client in clients]
 
-    def train(self, epochs=1):
-
+    def train(self, epochs=1, verbose=False):
+        print(f"Train Server")
         history = {
             "losses": [],
             "accuracies": []
         }
 
         public_loader = DataLoader(
-            TensorDataset(self.x_pub, self.y_pub_distill),
+            TensorDataset(self.x_pub, self.dist_parameters),
             batch_size=32
         )
         for epoch in range(epochs):
-            loss, acc = train_on_soft_labels(self.model, public_loader, optimiser=self.optimiser)
-            history["losses"].append(loss)
-            history["accuracies"].append(acc)
+            epoch_loss, epoch_acc = train_on_soft_labels(self.model, public_loader, optimiser=self.optimiser)
+            history["losses"].append(epoch_loss)
+            history["accuracies"].append(epoch_acc)
+
+            if verbose:
+                print(f"Epoch {epoch + 1}: server train loss {epoch_loss}, accuracy {epoch_acc}")
 
         return sum(history["losses"]) / epochs, sum(history["accuracies"]) / epochs
 
@@ -107,23 +111,22 @@ class FedStrategy(FedAvg):
     ) -> Tuple[Optional[Parameters], Dict[str, Scalar]]:
         """Aggregate fit results using weighted average."""
 
-        # aggregate soft labels
+        # # aggregate soft labels
         weights_results = [
             (parameters_to_ndarrays(fit_res.parameters), fit_res.num_examples)
             for _, fit_res in results
         ]
         parameters_aggregated = ndarrays_to_parameters(aggregate(weights_results))
 
-        # soft_labels = [client.get_soft_labels() for client in self.participating_clients]
-        # torch.mean(torch.stack(soft_labels, dim=0), dim=0)
-
         # set soft labels
-        self.y_pub_distill = parameters_aggregated
-        loss, accuracy = self.train(epochs=self.server_epochs)  # train on soft labels
+        self.dist_parameters = parameters_to_tensor(parameters_aggregated)
+
+        loss, accuracy = self.train(self.server_epochs, self.verbose)  # train on soft labels
 
         # compute new soft labels
-        new_soft_labels = compute_soft_labels(self.model, self.x_pub)
+        new_soft_labels = tensor_to_parameters(compute_soft_labels(self.model, self.x_pub))
 
+        # send parameters to clients
         return new_soft_labels, {"accuracy": float(accuracy)}
 
     def configure_evaluate(
@@ -132,8 +135,13 @@ class FedStrategy(FedAvg):
         """Configure the next round of evaluation."""
         if self.fraction_evaluate == 0.0:
             return []
-        config = {}
-        evaluate_ins = EvaluateIns(parameters, config)
+
+        # Evaluation is done with weights
+        evaluate_ins = EvaluateIns(
+            get_parameters(self.model), {
+                "verbose": self.verbose
+            }
+        )
 
         # Sample clients
         sample_size, min_num_clients = self.num_evaluation_clients(

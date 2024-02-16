@@ -1,10 +1,11 @@
 # Code by Natasha
 # Last updated: 2023.12.30
 from collections import OrderedDict
+from typing import List
 
 import torch
 import torchvision
-from torch import nn
+from torch import nn, Tensor
 import torch.nn.functional as F
 from torchvision.models import resnet18
 from torch.utils.data import DataLoader, random_split
@@ -199,3 +200,14 @@ def set_parameters(model, parameters):
     params_dict = zip(model.state_dict().keys(), parameters)
     state_dict = OrderedDict({k: torch.Tensor(v) for k, v in params_dict})
     model.load_state_dict(state_dict, strict=True)
+
+
+def tensor_to_parameters(tensor: Tensor) -> Parameters:
+    d_tensors = tensor.cpu() if tensor.is_cuda else tensor  # Move tensor to CPU if it's on GPU
+    return values_to_bytes(d_tensors.numpy())
+
+
+def parameters_to_tensor(parameters: Parameters) -> Tensor:
+    bytes_ndarray = np.array(bytes_to_values(parameters.tensors))
+    tensors = torch.tensor(bytes_ndarray, device=DEVICE)
+    return tensors

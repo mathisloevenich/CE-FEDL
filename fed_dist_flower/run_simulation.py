@@ -1,4 +1,5 @@
 import argparse
+import os
 from datetime import datetime
 
 import pandas as pd
@@ -12,6 +13,9 @@ from data import cifar_data, femnist_data
 from models import create_model
 from client import FlowerClient
 from strategy import FedStrategy
+
+import logging
+logging.basicConfig(level=logging.DEBUG)
 
 
 class Simulation:
@@ -30,6 +34,15 @@ class Simulation:
         self.dataset_name = conf["data_set"]
         self.public_data_size = conf["public_data_size"]
 
+        strategy_conf = {
+            **conf,
+            "fraction_fit": 1.0,
+            "fraction_evaluate": 1.0,
+            "min_fit_clients": 2,
+            "min_evaluate_clients": 2,
+            "min_available_clients": 2
+        }
+
         # load dataset
         self.train_loaders, self.val_loaders, self.public_loader = self.load_dataset(
             self.dataset_name,
@@ -39,7 +52,11 @@ class Simulation:
         # self.public_labels = torch.cat([batch_y for _, batch_y in self.public_loader])
 
         server_model = create_model(self.server_architecture, self.dataset_name)  # create server model
-        self.strategy = FedStrategy(server_model, self.public_data, self.server_optimiser)
+        self.strategy = FedStrategy(
+            server_model,
+            self.public_data,
+            strategy_conf
+        )
 
     def client_fn(self, cid):
         train_loader = self.train_loaders[int(cid)]
@@ -72,12 +89,37 @@ class Simulation:
         history = fl.simulation.start_simulation(
             client_fn=self.client_fn,
             num_clients=self.num_clients,
-            config=fl.server.ServerConfig(num_rounds=3),
+            config=fl.server.ServerConfig(num_rounds=self.num_rounds),
             strategy=self.strategy,
             client_resources=client_resources
         )
 
         return history
+
+    def save_data(self, history):
+
+        data = pd.DataFrame({
+            'round': list(range(1, self.num_rounds + 1)),
+            'train_loss': history["train_losses"],
+            'train_accuracy': history["train_accuracies"],
+            'val_loss': history["val_losses"],
+            'val_accuracies': history["val_accuracies"]
+        })
+
+        # Dateipfad
+        directory = "results_data"
+
+        path_prefix = (
+            f"{directory}/{self.server_architecture}-{self.dataset_name}-cl{self.num_clients}-nr{self.num_rounds}"
+        )
+
+        index = 1
+        while os.path.exists(f"{path_prefix}_{index}.csv"):
+            index += 1
+
+        data.to_csv(f"{path_prefix}_{index}.csv", index=False)
+
+        torch.save(self.strategy.model.state_dict(), f"{path_prefix}_{index}_model.pth")
 
 
 if __name__ == "__main__":
@@ -87,6 +129,7 @@ if __name__ == "__main__":
     parser.add_argument("-d", "--data_set", type=str, default="cifar", help="Specify data set")
     parser.add_argument("--bup", type=int, default=8, help="Upstream precision")
     parser.add_argument("--bdown", type=int, default=8, help="Downstream precision")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose mode")
 
     args = parser.parse_args()
 
@@ -94,15 +137,16 @@ if __name__ == "__main__":
         "num_clients": args.num_clients,
         "num_rounds": args.num_rounds,
         "data_set": args.data_set,
+        "verbose": args.verbose,
         "client_epochs": 8,
         "client_dist_epochs": 2,
         "client_participation": 1.0,
         "client_optimiser": "Adam",
-        "client_model": "resnet18",
+        "client_model": "cnn500k",
         "server_epochs": 10,
         "server_optimiser": "Adam",
-        "server_model": "resnet18",
-        "public_data_size": 1000
+        "server_model": "cnn500k",
+        "public_data_size": 1000,
     }
 
     simulation = Simulation(config)
@@ -112,25 +156,11 @@ if __name__ == "__main__":
 
     # start calculation runtime
     start = datetime.now()
-    history = simulation.run_simulation()
+    hist = simulation.run_simulation()
     end = datetime.now()
 
     total_runtime = end - start
     print("Total runtime: ", total_runtime)
 
-    # results = pd.DataFrame({
-    #     "date": [datetime.now()],
-    #     "runtime": [end-start],
-    #     "dataset": [dataset_name],
-    #     "frac_clients": [frac_clients],
-    #     "num_clients": [num_clients],
-    #     "num_rounds": [num_rounds],
-    #     "approach": [approach],
-    #     "epochs": [epochs],
-    #     "sparsify_by": [sparsify_by],
-    #     "keep_first_last": [keep_first_last],
-    #     "learning_rate": [learning_rate],
-    #     "regularisation": [regularisation],
-    #     "losses": [history.losses_distributed],
-    #     "accs": [history.metrics_distributed["accuracy"]]
-    # })
+    # save data
+    simulation.save_data(hist)
