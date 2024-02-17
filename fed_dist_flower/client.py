@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import flwr as fl
 import random
 
@@ -87,7 +89,7 @@ class FlowerClient(fl.client.Client):
 
 	def fit(self, ins: FitIns) -> FitRes:
 		print(f"[Client {self.cid}] fit, config: {ins.config}")
-		# set_parameters(self.model, parameters)
+		start_time = datetime.now()
 
 		# only train on soft labels after first round
 		if ins.config["server_round"] > 1:
@@ -110,11 +112,20 @@ class FlowerClient(fl.client.Client):
 		)
 		self.soft_labels = compute_soft_labels(self.model, self.x_pub)  # predict soft labels
 
+		total_duration = datetime.now() - start_time
+
+		byte_size = self.soft_labels.element_size() * self.soft_labels.nelement()
+		print("Communication Cost (Bytes): ", byte_size)
+
 		return FitRes(
 			status=Status(code=Code.OK, message="Success"),
 			parameters=tensor_to_parameters(self.soft_labels),
 			num_examples=len(self.train_loader),
-			metrics={"accuracy": float(accuracy)}
+			metrics={
+				"accuracy": float(accuracy),
+				"computation_time": total_duration,
+				"communication_cost": byte_size
+			}
 		)
 
 	def evaluate(self, ins: EvaluateIns) -> EvaluateRes:
