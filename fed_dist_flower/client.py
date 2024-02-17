@@ -92,7 +92,12 @@ class FlowerClient(fl.client.Client):
 				TensorDataset(self.x_pub, parameters_to_tensor(ins.parameters)),
 				batch_size=32
 			)
-			self.train(client_loader, train_fn="train_sl", epochs=ins.config["client_dist_epochs"])
+			self.train(
+				client_loader,
+				train_fn="train_sl",
+				epochs=ins.config["client_dist_epochs"],
+				verbose=ins.config["verbose"]
+			)
 
 		loss, accuracy = self.train(
 			self.train_loader,
