@@ -150,15 +150,15 @@ if __name__ == "__main__":
         "num_rounds": args.num_rounds,
         "data_set": args.data_set,
         "verbose": args.verbose,
-        "client_epochs": 20,
-        "client_dist_epochs": 20,
+        "client_epochs": 1,
+        "client_dist_epochs": 1,
         "client_participation": 1.0,
         "client_optimiser": "Adam",
         "client_model": "resnet18",
         "server_epochs": 10,
         "server_optimiser": "Adam",
         "server_model": "resnet18",
-        "public_ratio": 0.9,
+        "public_ratio": 0.5,
     }
 
     simulation = Simulation(config)

@@ -89,7 +89,7 @@ def cifar_data(num_clients=50, balanced_data=False, public_ratio=0.1, train_bs=3
         client_y = y_train[partitioned_train_data[client]]
 
         # now split and put some into public data
-        len_pub = len(client_x) // int((1 - public_ratio) * 100)
+        len_pub = int(len(client_x) * public_ratio)
         len_train = len(client_x) - len_pub
 
         client_x_train = client_x[:len_train]
