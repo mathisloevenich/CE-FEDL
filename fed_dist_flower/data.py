@@ -45,7 +45,7 @@ def femnist_data(num_clients, batch_size=32):
     return train_loaders, test_loaders, public_dataset
 
 
-def cifar_data(num_clients=50, balanced_data=False, public_ratio=0.1, train_bs=32, val_bs=32, pub_bs=32):
+def cifar_data(num_clients=50, balanced_data=False, public_ratio=0.1, train_bs=32, pub_bs=32):
     """
     Returns: a tuple containing the training data loaders, and test data loaders,
              with a dataloader for each client
@@ -110,7 +110,7 @@ def cifar_data(num_clients=50, balanced_data=False, public_ratio=0.1, train_bs=3
         client_y_val = y_test[partitioned_test_data[client]]
         val_loader = DataLoader(
             dataset=list(zip(client_x_val, client_y_val)),
-            batch_size=val_bs,
+            batch_size=train_bs,
             shuffle=True,
             pin_memory=True
         )

@@ -33,6 +33,8 @@ class Simulation:
         self.server_optimiser = conf["server_optimiser"]
         self.dataset_name = conf["data_set"]
         self.public_ratio = conf["public_ratio"]
+        self.train_bs = conf["train_bs"]
+        self.pub_bs = conf["pub_bs"]
 
         strategy_conf = {
             **conf,
@@ -46,10 +48,7 @@ class Simulation:
         self.conf = conf
 
         # load dataset
-        self.train_loaders, self.val_loaders, self.public_loader = self.load_dataset(
-            self.dataset_name,
-            public_ratio=self.public_ratio
-        )
+        self.train_loaders, self.val_loaders, self.public_loader = self.load_dataset(self.dataset_name)
 
         self.public_data = torch.cat([batch_x[0] for batch_x in self.public_loader], dim=0)
 
@@ -68,18 +67,18 @@ class Simulation:
             train_loader,
             val_loader,
             self.public_data,
-            self.client_architecture,
-            self.dataset_name,
-            optimiser=self.client_optimiser
+            conf=self.conf
         )
 
-    def load_dataset(self, data_set, public_ratio=10000):
+    def load_dataset(self, data_set):
         if data_set == "cifar":
             return cifar_data(
                 self.num_clients,
                 balanced_data=True,
-                public_ratio=public_ratio
-            )  # get one more for public dataset
+                public_ratio=self.public_ratio,
+                train_bs=self.train_bs,
+                pub_bs=self.pub_bs
+            )
         elif data_set == "femnist":
             return femnist_data(combine_clients=self.num_clients)
 
@@ -150,15 +149,17 @@ if __name__ == "__main__":
         "num_rounds": args.num_rounds,
         "data_set": args.data_set,
         "verbose": args.verbose,
-        "client_epochs": 1,
-        "client_dist_epochs": 1,
+        "client_epochs": 10,
+        "client_dist_epochs": 10,
         "client_participation": 1.0,
         "client_optimiser": "Adam",
         "client_model": "resnet18",
         "server_epochs": 10,
         "server_optimiser": "Adam",
         "server_model": "resnet18",
-        "public_ratio": 0.5,
+        "public_ratio": 0.6,  # percentage of train data is split for public data
+        "train_bs": 64,  # training and validation batch size
+        "pub_bs": 128  # public batch size
     }
 
     simulation = Simulation(config)

@@ -42,6 +42,7 @@ class FedStrategy(FedAvg):
         self.server_epochs = conf["server_epochs"]
         self.optimiser = conf["server_optimiser"]
         self.verbose = conf["verbose"]
+        self.train_bs = conf["train_bs"]
 
         self.fraction_fit = conf["fraction_fit"]
         self.fraction_evaluate = conf["fraction_evaluate"]
@@ -89,7 +90,7 @@ class FedStrategy(FedAvg):
 
         public_loader = DataLoader(
             TensorDataset(self.x_pub, self.dist_parameters),
-            batch_size=32
+            batch_size=self.train_bs
         )
         for epoch in range(epochs):
             epoch_loss, epoch_acc = train_on_soft_labels(self.model, public_loader, optimiser=self.optimiser)

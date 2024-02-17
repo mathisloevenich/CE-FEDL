@@ -28,6 +28,7 @@ class FlowerClient(fl.client.Client):
 			train_loader: DataLoader,
 			val_loader: DataLoader,
 			x_pub,
+			conf,
 			model_architecture="cnn500k",
 			dataset_name="cifar",
 			optimiser="Adam"
@@ -36,12 +37,15 @@ class FlowerClient(fl.client.Client):
 		self.train_loader = train_loader
 		self.val_loader = val_loader
 		self.x_pub = x_pub  # fixed public data
+
+		self.model_architecture = conf["client_model"]
+		self.dataset_name = conf["data_set"]
+		self.optimiser = conf["client_optimiser"]
+		self.train_bs = conf["train_bs"]
+
 		self.soft_labels: Tensor = None
 		self.distilled_soft_labels = None
-		self.model_architecture = model_architecture
 		self.model = None
-		self.dataset_name = dataset_name
-		self.optimiser = optimiser
 
 		# initialize model
 		self.initialize_model()
@@ -90,7 +94,7 @@ class FlowerClient(fl.client.Client):
 			# only allocate once for every client
 			client_loader = DataLoader(
 				TensorDataset(self.x_pub, parameters_to_tensor(ins.parameters)),
-				batch_size=32
+				batch_size=self.train_bs
 			)
 			self.train(
 				client_loader,
