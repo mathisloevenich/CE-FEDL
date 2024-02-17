@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 from datetime import datetime
 
@@ -42,6 +43,8 @@ class Simulation:
             "min_available_clients": 2
         }
 
+        self.conf = conf
+
         # load dataset
         self.train_loaders, self.val_loaders, self.public_loader = self.load_dataset(
             self.dataset_name,
@@ -82,7 +85,7 @@ class Simulation:
     def run_simulation(self):
         client_resources = None
         if DEVICE == "cuda":
-            client_resources = {"num_gpus": 1, "num_cpus": 1}
+            client_resources = {"num_gpus": 0.9, "num_cpus": 8}
 
         sim_hist = fl.simulation.start_simulation(
             client_fn=self.client_fn,
@@ -92,15 +95,15 @@ class Simulation:
             client_resources=client_resources
         )
 
-        print(sim_hist.metrics_distributed)
-
         _, losses = zip(*sim_hist.losses_distributed)
         _, accuracies = zip(*sim_hist.metrics_distributed["accuracy"])
+        _, train_accuracies = zip(*sim_hist.metrics_distributed_fit["accuracy"])
 
         hist = {
             "round": list(range(1, self.num_rounds + 1)),
             "losses": losses,
-            "accuracies": accuracies
+            "accuracies": accuracies,
+            "train_accuracies": train_accuracies
         }
 
         # save data
@@ -121,9 +124,13 @@ class Simulation:
         while os.path.exists(f"{path_prefix}_{index}.csv"):
             index += 1
 
+        # store model results
         data.to_csv(f"{path_prefix}_{index}.csv", index=False)
-
+        # store model
         torch.save(self.strategy.model.state_dict(), f"{path_prefix}_{index}_model.pth")
+        # store config
+        with open(f"{path_prefix}_{index}_conf.json", "w") as file:
+            json.dump(self.conf, file, indent=True)
 
 
 if __name__ == "__main__":
@@ -142,15 +149,15 @@ if __name__ == "__main__":
         "num_rounds": args.num_rounds,
         "data_set": args.data_set,
         "verbose": args.verbose,
-        "client_epochs": 8,
-        "client_dist_epochs": 2,
+        "client_epochs": 20,
+        "client_dist_epochs": 20,
         "client_participation": 1.0,
         "client_optimiser": "Adam",
-        "client_model": "cnn500k",
+        "client_model": "resnet18",
         "server_epochs": 10,
         "server_optimiser": "Adam",
-        "server_model": "cnn500k",
-        "public_data_size": 2000,
+        "server_model": "resnet18",
+        "public_data_size": 20000,
     }
 
     simulation = Simulation(config)
