@@ -45,7 +45,7 @@ def femnist_data(num_clients, batch_size=32):
     return train_loaders, test_loaders, public_dataset
 
 
-def cifar_data(num_clients=50, balanced_data=False, public_data_size=10000, batch_size=32):
+def cifar_data(num_clients=50, balanced_data=False, public_ratio=0.1, train_bs=32, val_bs=32, pub_bs=32):
     """
     Returns: a tuple containing the training data loaders, and test data loaders,
              with a dataloader for each client
@@ -80,12 +80,27 @@ def cifar_data(num_clients=50, balanced_data=False, public_data_size=10000, batc
     train_loaders = []
     val_loaders = []
 
+    public_x = []
+    # pubic_y = []
+
     # Put the data onto a dataloader for each client, following the partitions
     for client in range(num_clients):
-        client_x_train = x_train[partitioned_train_data[client], :, :, :]
-        client_y_train = y_train[partitioned_train_data[client]]
+        client_x = x_train[partitioned_train_data[client], :, :, :]
+        client_y = y_train[partitioned_train_data[client]]
+
+        # now split and put some into public data
+        len_pub = len(client_x) // int((1 - public_ratio) * 100)
+        len_train = len(client_x) - len_pub
+
+        client_x_train = client_x[:len_train]
+        client_y_train = client_y[:len_train]
+
+        # append partition to public data
+        public_x.append(client_x[len_train:])
+        # pubic_y.extend(client_y[len_train:])
+
         train_loader = DataLoader(dataset=list(zip(client_x_train, client_y_train)),
-                                  batch_size=batch_size,
+                                  batch_size=train_bs,
                                   shuffle=True,
                                   pin_memory=True)
 
@@ -95,15 +110,23 @@ def cifar_data(num_clients=50, balanced_data=False, public_data_size=10000, batc
         client_y_val = y_test[partitioned_test_data[client]]
         val_loader = DataLoader(
             dataset=list(zip(client_x_val, client_y_val)),
-            batch_size=batch_size,
+            batch_size=val_bs,
             shuffle=True,
             pin_memory=True
         )
 
         val_loaders.append(val_loader)
 
+    public_tensor = torch.tensor(np.concatenate(public_x, axis=0))
+
     public_loader = DataLoader(
-        dataset=x_train[:public_data_size], batch_size=batch_size, shuffle=True, pin_memory=True
+        dataset=TensorDataset(public_tensor),
+        batch_size=pub_bs,
+        shuffle=True,
+        pin_memory=True
     )
 
     return train_loaders, val_loaders, public_loader
+
+
+

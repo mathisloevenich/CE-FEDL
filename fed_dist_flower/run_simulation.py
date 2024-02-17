@@ -32,7 +32,7 @@ class Simulation:
         self.server_architecture = conf["server_model"]
         self.server_optimiser = conf["server_optimiser"]
         self.dataset_name = conf["data_set"]
-        self.public_data_size = conf["public_data_size"]
+        self.public_ratio = conf["public_ratio"]
 
         strategy_conf = {
             **conf,
@@ -48,9 +48,10 @@ class Simulation:
         # load dataset
         self.train_loaders, self.val_loaders, self.public_loader = self.load_dataset(
             self.dataset_name,
-            public_data_size=self.public_data_size
+            public_ratio=self.public_ratio
         )
-        self.public_data = torch.cat([batch_x for batch_x in self.public_loader])
+
+        self.public_data = torch.cat([batch_x[0] for batch_x in self.public_loader], dim=0)
 
         server_model = create_model(self.server_architecture, self.dataset_name)  # create server model
         self.strategy = FedStrategy(
@@ -72,12 +73,12 @@ class Simulation:
             optimiser=self.client_optimiser
         )
 
-    def load_dataset(self, data_set, public_data_size=10000):
+    def load_dataset(self, data_set, public_ratio=10000):
         if data_set == "cifar":
             return cifar_data(
                 self.num_clients,
                 balanced_data=True,
-                public_data_size=public_data_size
+                public_ratio=public_ratio
             )  # get one more for public dataset
         elif data_set == "femnist":
             return femnist_data(combine_clients=self.num_clients)
@@ -157,7 +158,7 @@ if __name__ == "__main__":
         "server_epochs": 10,
         "server_optimiser": "Adam",
         "server_model": "resnet18",
-        "public_data_size": 20000,
+        "public_ratio": 0.9,
     }
 
     simulation = Simulation(config)

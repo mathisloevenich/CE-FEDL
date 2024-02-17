@@ -69,8 +69,6 @@ class FedStrategy(FedAvg):
             min_num_clients=min_num_clients
         )
 
-        # dist_soft_labels = tensor_to_parameters(self.dist_parameters)
-
         # return the sampled clients
         fit_ins = FitIns(
             parameters, {
