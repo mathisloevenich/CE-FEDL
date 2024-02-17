@@ -165,22 +165,33 @@ class FedStrategy(FedAvg):
         if not results:
             return None, {}
 
-        loss_aggregated = weighted_loss_avg(
-            [
-                (evaluate_res.num_examples, evaluate_res.loss)
-                for _, evaluate_res in results
-            ]
-        )
-        metrics_aggregated = {}
-        return loss_aggregated, metrics_aggregated
+        weighted_metrics = [
+            (evaluate_res.num_examples,
+             evaluate_res.num_examples * evaluate_res.loss,
+             evaluate_res.num_examples * evaluate_res.metrics["accuracy"]) for _, evaluate_res in results
+        ]
+        total_num_examples = sum([value[0] for value in weighted_metrics])
+        aggregated_loss = sum([value[1] for value in weighted_metrics]) / total_num_examples
+        aggregated_metrics = {"accuracy": sum([value[2] for value in weighted_metrics]) / total_num_examples}
+
+        return aggregated_loss, aggregated_metrics
 
     def evaluate(
         self, server_round: int, parameters: Parameters
     ) -> Optional[Tuple[float, Dict[str, Scalar]]]:
         """Evaluate global model parameters using an evaluation function."""
+        if self.evaluate_fn is None:
+            # No evaluation function provided
+            return None
 
-        # Let's assume we won't perform the global model evaluation on the server side.
-        return None
+        # We deserialize using our custom method
+        parameters_ndarrays = parameters_to_ndarrays(parameters)
+
+        eval_res = self.evaluate_fn(server_round, parameters_ndarrays, {})
+        if eval_res is None:
+            return None
+        loss, metrics = eval_res
+        return loss, metrics
 
     def num_fit_clients(self, num_available_clients: int) -> Tuple[int, int]:
         """Return sample size and required number of clients."""
