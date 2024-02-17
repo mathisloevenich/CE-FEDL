@@ -74,7 +74,7 @@ def train(
         model,
         train_loader,
         optimiser="SGD",
-        lr=0.01,
+        lr=0.1,
         weight_decay=0
 ):
 
