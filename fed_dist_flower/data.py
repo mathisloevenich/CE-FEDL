@@ -15,37 +15,59 @@ import torch
 from torchvision import datasets, transforms
 
 
-def femnist_data(num_clients, batch_size=32):
+def femnist_data(num_clients=10, public_ratio=0.1, train_bs=32, pub_bs=32):
     transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize((0.1307,), (0.3081,))
     ])
 
-    train_datasets = []
-    test_datasets = []
-    public_dataset = datasets.EMNIST(root='./femnist_data', split='byclass', train=True, download=True, transform=transform)
+    train_dataset = datasets.EMNIST(
+        root="femnist_data",
+        split="balanced",
+        train=True,
+        download=True,
+        transform=transform
+    )
+    test_dataset = datasets.EMNIST(
+        root="femnist_data",
+        split="balanced",
+        train=False,
+        download=True,
+        transform=transform
+    )
 
-    total_samples = len(public_dataset)
-    samples_per_client = total_samples // num_clients
+    # Split train dataset into train and public datasets
+    len_pub = int(public_ratio * len(train_dataset))
+    len_train = len(train_dataset) - len_pub
+    public_data, train_data = torch.utils.data.random_split(train_dataset, [len_pub, len_train])
 
-    for i in range(num_clients):
-        start_idx = i * samples_per_client
-        end_idx = start_idx + samples_per_client
+    # Split train dataset for each client
+    train_samples = len(train_dataset) // num_clients
+    client_train_datasets = [
+        Subset(train_data, range(i * train_samples, (i + 1) * train_samples))
+        for i in range(num_clients)
+    ]
+    # split test dataset for each client
+    val_samples = len(test_dataset) // num_clients
+    client_val_datasets = [
+        Subset(test_dataset, range(i * val_samples, (i + 1) * val_samples))
+        for i in range(num_clients)
+    ]
 
-        client_dataset = torch.utils.data.Subset(public_dataset, range(start_idx, end_idx))
-        train_datasets.append(client_dataset)
-        test_datasets.append(
-            datasets.EMNIST(root='./femnist_data', split='byclass', train=False, download=True, transform=transform))
+    # Create PyTorch DataLoader objects for train and validation datasets of each client
+    client_train_loaders = [
+        DataLoader(dataset, batch_size=train_bs, shuffle=True, drop_last=True) for dataset in client_train_datasets
+    ]
+    client_val_loaders = [
+        DataLoader(dataset, batch_size=train_bs, shuffle=False, drop_last=True) for dataset in client_val_datasets
+    ]
 
-    train_loaders = [torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True) for dataset in
-                     train_datasets]
-    test_loaders = [torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False) for dataset in
-                    test_datasets]
+    public_loader = torch.utils.data.DataLoader(public_data, batch_size=pub_bs, shuffle=False)
 
-    return train_loaders, test_loaders, public_dataset
+    return client_train_loaders, client_val_loaders, public_loader
 
 
-def cifar_data(num_clients=50, balanced_data=False, public_ratio=0.1, train_bs=32, pub_bs=32):
+def cifar_data(num_clients=10, balanced_data=False, public_ratio=0.1, train_bs=32, pub_bs=32):
     """
     Returns: a tuple containing the training data loaders, and test data loaders,
              with a dataloader for each client

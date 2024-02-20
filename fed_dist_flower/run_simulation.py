@@ -80,7 +80,12 @@ class Simulation:
                 pub_bs=self.pub_bs
             )
         elif data_set == "femnist":
-            return femnist_data(combine_clients=self.num_clients)
+            return femnist_data(
+                num_clients=self.num_clients,
+                public_ratio=self.public_ratio,
+                train_bs=self.train_bs,
+                pub_bs=self.pub_bs
+            )
 
     def run_simulation(self):
         client_resources = None
