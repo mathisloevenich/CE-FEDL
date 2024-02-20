@@ -42,7 +42,7 @@ def femnist_data(num_clients=10, public_ratio=0.1, train_bs=32, pub_bs=32):
     public_data, train_data = torch.utils.data.random_split(train_dataset, [len_pub, len_train])
 
     # Split train dataset for each client
-    train_samples = len(train_dataset) // num_clients
+    train_samples = len(train_data) // num_clients
     client_train_datasets = [
         Subset(train_data, range(i * train_samples, (i + 1) * train_samples))
         for i in range(num_clients)
