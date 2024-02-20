@@ -22,7 +22,9 @@ def create_model(architecture, dataset_name, seed=SEED):
         return create_cnn500k(dataset_name, seed)
     if architecture == "resnet18":
         if dataset_name == "femnist":
-            return models.resnet18(num_classes=62)  # 62 classes in FEMNIST dataset
+            model = models.resnet18(num_classes=62)  # 62 classes in FEMNIST dataset
+            model.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
+            return model
         elif dataset_name == "cifar":
             return models.resnet18(num_classes=10)  # 10 classes in CIFAR dataset
 
