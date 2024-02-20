@@ -112,10 +112,9 @@ class FlowerClient(fl.client.Client):
 		)
 		self.soft_labels = compute_soft_labels(self.model, self.x_pub)  # predict soft labels
 
+		# more metrics
 		total_duration = datetime.now() - start_time
-
 		byte_size = self.soft_labels.element_size() * self.soft_labels.nelement()
-		print("Communication Cost (Bytes): ", byte_size)
 
 		return FitRes(
 			status=Status(code=Code.OK, message="Success"),
