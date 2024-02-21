@@ -10,7 +10,7 @@ import random
 import flwr as fl
 
 from utils import DEVICE
-from data import cifar_data, femnist_data
+from data import cifar_data, femnist_data_json
 from models import create_model
 from client import FlowerClient
 from strategy import FedStrategy
@@ -80,7 +80,7 @@ class Simulation:
                 pub_bs=self.pub_bs
             )
         elif data_set == "femnist":
-            return femnist_data(
+            return femnist_data_json(
                 num_clients=self.num_clients,
                 public_ratio=self.public_ratio,
                 train_bs=self.train_bs,
