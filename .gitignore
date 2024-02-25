@@ -4,3 +4,4 @@ aggregation_methods/leaf/
 aggregation_methods/__pycache__/
 aggregation_methods/visualize.html
 .ipynb_checkpoints
+__init__.py
