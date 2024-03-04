@@ -11,3 +11,5 @@ The three methods being compared are:
 - [Federated Distillation](fed_dist_flower)
 - [One-shot](aggregation_methods)
 - [Sparsification](sparsification)
+  
+These methods are compared to the baseline [FedAvg](fed_avg).
