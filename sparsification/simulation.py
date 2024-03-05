@@ -1,6 +1,3 @@
-# Code by Natasha
-# Last updated: 2023.12.30
-
 import json
 import numpy as np
 import torch
@@ -20,6 +17,9 @@ from flwr.common import EvaluateIns, EvaluateRes, FitIns, FitRes, Status, GetPar
 from flwr.server.client_manager import ClientManager
 from flwr.server.client_proxy import ClientProxy
 import utils
+import models
+import data
+import argparse
 
 class SparsifyClient(fl.client.Client):
     def __init__(self, 
@@ -60,6 +60,7 @@ class SparsifyClient(fl.client.Client):
         # recieve the model parameters from the global model, apply to the local client model
         global_model_parameters = utils.bytes_to_values_list(ins.parameters.tensors)
         global_state_dict = zip(self.model.state_dict().keys(), global_model_parameters)
+        # FROM_NUMPY HERE IS POTENTIALLY CAUSING A BUG
         global_state_dict = OrderedDict({key: torch.from_numpy(value) for key, value in global_state_dict})
         self.model.load_state_dict(global_state_dict, strict=True)
         # train the model using local data
@@ -215,20 +216,31 @@ class SparsifyStrategy(fl.server.strategy.Strategy):
     def evaluate(self, server_round, parameters):
         # no evaluation on the global model
         return None
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Simulate federated learning with sparsification")
+    parser.add_argument("--dataset_name", required=True)
+    parser.add_argument("--femnist_location", default="femnist_data")
+    parser.add_argument("--approach", required=True)
+    parser.add_argument("--sparsify_by", type=float, required=True)
+    parser.add_argument("--num_rounds", type=int, required=True)
+    parser.add_argument("--keep_first_last", default=False, action="store_true")
+    parser.add_argument("--epochs", default=1, type=int)
+    parser.add_argument("--learning_rate", default=0.1, type=float)
+    parser.add_argument("--regularisation", default=0, type=float)
+    args = parser.parse_args()
     
-def start_simulation(model,
-                     dataset_name,
-                     frac_clients,
-                     frac_eval_clients,
-                     num_rounds,
-                     train_loaders,
-                     test_loaders,
-                     approach,
-                     epochs,
-                     sparsify_by,
-                     keep_first_last,
-                     learning_rate,
-                     regularisation):
+    if args.dataset_name=="femnist":
+        model=models.create_model("femnist", "CNN500k")
+        train_loaders, test_loaders = data.femnist_data(args.femnist_location)
+        frac_clients = 0.25
+        frac_eval_clients = 0.25
+    elif args.dataset_name=="cifar":
+        model=models.create_model("cifar", "CNN500k")
+        train_loaders, test_loaders = data.cifar_data()
+        frac_clients = 0.3
+        frac_eval_clients = 0.3
+    
     # pre-compute information to provide to the server (strategy)
     num_clients = int(frac_clients * len(train_loaders))
     num_eval_clients = int(frac_eval_clients * len(train_loaders))
@@ -246,10 +258,10 @@ def start_simulation(model,
                   "num_last_layer":layer_num_params[-1],
                   "indices_first_layer":list(range(layer_num_params[0] + layer_num_params[1])),
                   "indices_last_layer":list(range(num_model_params - layer_num_params[-1], num_model_params))}
-    if keep_first_last:
-        model_info["num_to_spars"] = int(num_model_params * sparsify_by) - model_info["num_first_layer"] - model_info["num_last_layer"]
+    if args.keep_first_last:
+        model_info["num_to_spars"] = int(num_model_params * args.sparsify_by) - model_info["num_first_layer"] - model_info["num_last_layer"]
     else:
-        model_info["num_to_spars"] = int(num_model_params * sparsify_by)
+        model_info["num_to_spars"] = int(num_model_params * args.sparsify_by)
         
     client_resources = {"num_gpus": 1, "num_cpus": 1}
     
@@ -261,12 +273,12 @@ def start_simulation(model,
                               model, 
                               train_loader, 
                               test_loader, 
-                              approach,
-                              epochs, 
-                              sparsify_by,
-                              keep_first_last,
-                              learning_rate, 
-                              regularisation,
+                              args.approach,
+                              args.epochs, 
+                              args.sparsify_by,
+                              args.keep_first_last,
+                              args.learning_rate, 
+                              args.regularisation,
                               model_info)
     
     # define the custom strategy
@@ -279,37 +291,34 @@ def start_simulation(model,
                                 layer_shapes=layer_shapes,
                                 layer_num_params=layer_num_params,
                                 cum_num_params=cum_num_params,
-                                approach=approach)
+                                approach=args.approach)
 
     # begin the simulation
     start = datetime.now()
     history = fl.simulation.start_simulation(
         client_fn=client_fn,
         num_clients=num_clients,
-        config=fl.server.ServerConfig(num_rounds=num_rounds),
+        config=fl.server.ServerConfig(num_rounds=args.num_rounds),
         strategy=strategy,  
         client_resources=client_resources)
     end = datetime.now()
     time_taken = end-start
     
-    results = pd.DataFrame({"date": [datetime.now()], 
-                            "time_taken": [time_taken],
-                            "dataset": [dataset_name], 
+    results = pd.DataFrame({"time_taken": [time_taken],
+                            "dataset": [args.dataset_name], 
                             "frac_clients": [frac_clients],
                             "num_clients": [num_clients],
-                            "num_rounds": [num_rounds],
-                            "approach": [approach],
-                            "epochs": [epochs], 
-                            "sparsify_by": [sparsify_by], 
-                            "keep_first_last": [keep_first_last],
-                            "learning_rate": [learning_rate], 
-                            "regularisation": [regularisation],
+                            "num_rounds": [args.num_rounds],
+                            "approach": [args.approach],
+                            "epochs": [args.epochs], 
+                            "sparsify_by": [args.sparsify_by], 
+                            "keep_first_last": [args.keep_first_last],
+                            "learning_rate": [args.learning_rate], 
+                            "regularisation": [args.regularisation],
                             "losses": [history.losses_distributed],
                             "accs": [history.metrics_distributed["accuracy"]],
                            })
-    if os.path.isfile("results.csv"): 
-        results.to_csv("results.csv", mode="a", index=False, header=False)
+    if os.path.isfile("results/results.csv"): 
+        results.to_csv("results/results.csv", mode="a", index=False, header=False)
     else:
-        results.to_csv("results.csv", mode="a", index=False, header=True)
-    
-    return history
+        results.to_csv("results/results.csv", mode="a", index=False, header=True)
