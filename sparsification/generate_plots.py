@@ -110,7 +110,7 @@ def plot_download_size():
     ax.set_ylabel("Client Download Size (Bytes)");
     ax.text(x=0.75, y=0.8, s="* Public\ndataset\nsize", alpha=0.6, horizontalalignment="right", fontsize=17, transform=ax.transAxes);
     ax.set_title("Download Size for each Client on CIFAR-10", fontsize=16);
-    ax.set_xticklabels(["FedAvg", "Sparsification", "One-shot\n(MA-Echo)", "Distillation"]);
+    ax.set_xticklabels(["FedAvg", "Sparsification", "One-shot\n(MA-Echo)", "Federated\nDistillation"]);
 
     plt.savefig("figures/download_size_cifar.png", 
                 dpi=300,
@@ -118,14 +118,18 @@ def plot_download_size():
                 facecolor="white")
     
 def plot_sparsification_pareto():
+    
     all_results = pd.read_csv("results/results.csv")
+    all_results = all_results[all_results["keep_first_last"]==False]
     extra_topk = pd.read_csv("results/threshold_vs_topk.csv").iloc[:,:-1]
-    all_results = all_results[all_results["keep_first_last"]==False].reset_index(drop=True)
-    all_results = pd.concat([all_results, extra_topk]).drop_duplicates().reset_index(drop=True)
+    fedavg = pd.read_csv("results/fedavg_results.csv")
+    fedavg = fedavg.rename(columns={"client_bytes":"bytes_size"})
+    fedavg["spars_label"] = "FedAvg"
+    all_results = pd.concat([all_results, extra_topk, fedavg]).drop_duplicates().reset_index(drop=True)
     all_results["max_accuracy"] = all_results["accs"].apply(lambda row: max([value[1] for value in ast.literal_eval(row)]))
 
-    palette = ['#2b8cbe', '#e34a33', '#31a354']
-    palette_dict = {"Top-k":'#b30000', "Random":'#045a8d', "Threshold":'#006837'}
+    palette = ["#000000", '#2b8cbe', '#e34a33', '#31a354']
+    palette_dict = {"FedAvg":"#000000", "Top-k":'#b30000', "Random":'#045a8d', "Threshold":'#006837'}
 
     sns.set_theme(style='white', font_scale=1.25)
     fig, axes = plt.subplots(ncols=2, 
@@ -156,7 +160,7 @@ def plot_sparsification_pareto():
                      x="bytes_size", 
                      y="max_accuracy", 
                      hue="approach", 
-                     hue_order=["Random", "Top-k", "Threshold"],
+                     hue_order=["FedAvg", "Random", "Top-k", "Threshold"],
                      palette=palette,
                      s=200,
                      alpha=1,
@@ -167,7 +171,7 @@ def plot_sparsification_pareto():
              y="max_accuracy", 
              hue="approach", 
              hue_order=["Top-k", "Threshold"],
-             palette=palette[1:],
+             palette=palette[2:],
              s=200,
              alpha=1,
              ax=axes[i, 1])
@@ -215,6 +219,13 @@ def plot_sparsification_pareto():
             axes[i, x].legend(title="Sparsification\nApproach", facecolor = 'white', framealpha=1.0, loc="lower right");
             axes[1, x].set_xlabel("Bytes Uploaded by a Client")
             axes[0, x].set_xlabel("")
+            handles, labels = axes[0, 0].get_legend_handles_labels()
+            axes[x, 0].legend([handles[0]] + ["Sparsification", "Approach"] + handles[1:4],
+                      [labels[0]] + ["", ""] + labels[1:4],
+                       handler_map={str: LegendTitle({'fontsize': 15})},
+                       facecolor="white",
+                       framealpha=1,
+                       loc="lower right")
 
     axes[0, 0].set_title("Bytes Uploaded vs Accuracy\nfor Sparsification Approaches on FEMNIST")
     axes[0, 1].set_title("Pareto Optimal Sparsification Approaches on FEMNIST")
@@ -303,7 +314,7 @@ def plot_combined_pareto():
             axes[i, x].set_ylabel("")
 
     handles, labels = axes[0, 0].get_legend_handles_labels()
-    axes[1, 1].legend([handles[0]] + ["Sparsification"] + handles[1:4] + ["Distillation"] + handles[4:6] + ["One-shot"] + handles[6:10],
+    axes[1, 1].legend([handles[0]] + ["Sparsification"] + handles[1:4] + ["Federated distillation"] + handles[4:6] + ["One-shot"] + handles[6:10],
                  [labels[0]] + [""] + labels[1:4] + [""] + ["Distillation (10 (CIFAR) \n or 4 (FEMNIST) rounds)", "Distillation (2 rounds)"] + [""] + labels[6:10],
                    handler_map={str: LegendTitle({'fontsize': 15})},
                    facecolor="white",
@@ -817,7 +828,57 @@ def plot_threshold_over_time():
                 dpi=300,
                 bbox_inches="tight",
                 facecolor="white")
+
     
+def plot_threshold_vs_topk():
+    
+    results = pd.read_csv("results/threshold_vs_topk.csv")
+    results["accs"] = results["accs"].apply(lambda row: ast.literal_eval(row))
+    results = results.explode("accs").reset_index(drop=True)
+    results["round"] = results["accs"].apply(lambda row: row[0])
+    results["accuracy"] = results["accs"].apply(lambda row: row[1])
+    sns.set_theme(style="white", font_scale=1.25)
+    fig, axes = plt.subplots(ncols=5, nrows=2, 
+                             figsize=(24, 8), 
+                             gridspec_kw={"wspace": 0.2,
+                                          "hspace": 0.3})
+    titles=["30% Top-k vs ~29.4% Threshold",
+            "5% Top-k vs ~5.6% Threshold",
+            "1% Top-k vs ~0.8% Threshold",
+            "0.5% Top-k vs ~0.5% Threshold",
+            "0.4% Top-k vs ~0.4% Threshold",
+            "25% Top-k vs ~24.5% Threshold",
+            "3% Top-k vs ~3.6% Threshold",
+            "1% Top-k vs ~1.2% Threshold",
+            "0.4% Top-k vs ~0.4% Threshold",
+            "0.2% Top-k vs ~0.2% Threshold"]
+    for plot, ax in enumerate(axes.reshape(-1), start=1):
+        sns.lineplot(data=results[results["plot"]==plot],
+                     x="round",
+                     y="accuracy",
+                     hue="approach",
+                     palette=["#e34a33", "#31a354"],
+                     linewidth=1.5,
+                     ax=ax)
+        ax.yaxis.set_major_formatter(mtick.PercentFormatter(decimals=0))
+        ax.grid(alpha=0.4, zorder=-300)
+        ax.set_ylabel("")
+        ax.set_xlabel("")
+        ax.get_legend().remove()
+        ax.set_title(titles[plot-1])
+    axes[0, 0].legend(title="Approach", framealpha=1)
+
+    axes[0, 0].set_ylabel("Accuracy on FEMNIST")
+    axes[1, 0].set_ylabel("Accuracy on CIFAR-10")
+
+    for i in range(5):
+        axes[1, i].set_xlabel("Federated Learning Round")
+
+    plt.savefig(f"figures/topk_vs_threshold.png", 
+                dpi=300,
+                bbox_inches="tight",
+                facecolor="white")
+
 class LegendTitle(object):
     def __init__(self, text_props=None):
         self.text_props = text_props or {}
